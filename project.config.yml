@@ -1,0 +1,103 @@
+# project.config.yml
+#
+# Reference example — this is the load-bearing config artifact described in
+# AI-SDLC-FRAMEWORK-SPEC.md section 3. Every hook, template, and CLI script in
+# this framework reads its runtime parameters from a file shaped exactly like
+# this one. Consuming repos copy this file, replace every value with their own
+# stack's bindings, and validate it with `scripts/validate-config.mjs`.
+#
+# This particular example encodes a mobile/Gradle team's bindings. It is a
+# worked EXAMPLE, not a default — nothing in the invariant core depends on
+# Gradle, Kotlin, or any value shown here. See docs/ONBOARDING.md for a second
+# worked example (mobile/Xcode) that fills in entirely different values.
+#
+# Note: team.branch_prefixes (a map of ticket type -> branch prefix) is an
+# extension beyond AI-SDLC-FRAMEWORK-SPEC.md section 3's literal schema,
+# which shows a single team.default_branch_prefix string. Added so
+# feature/bug/etc. tickets branch under distinct prefixes
+# (agents/coordinator.md is where this is actually consumed).
+version: 1
+
+team:
+  name: "mobile-engineering"
+  git_remote: "git@github.com:enterprise/mobile-app.git"
+  branch_prefixes:
+    feature: "feat/"
+    bug: "bug/"
+    chore: "chore/"
+    hotfix: "hotfix/"
+
+stack:
+  package_manager: "gradle"
+  lint_cmd: "./gradlew ktlintCheck --file {file}"
+  test_cmd: "./gradlew test --tests {base}Test"
+  extra_validate_cmd: "./gradlew detekt"
+  flags:
+    no_install: true # Enforces --no-install during hook checks to prevent unauthorized package downloads
+
+verify_hook:
+  include_glob: "app/src/**/*.kt"
+  test_pattern: "{base}Test.kt"
+  skip_globs:
+    - "**/*.md"
+    - "**/generated/**"
+    - "**/build/**"
+  loop_budget: 3 # Failure threshold before escalating to human review
+
+hard_rules:
+  - id: "no-live-data"
+    statement: "No connections to live/production endpoints or databases."
+    audit: static
+    review_gate: blocking
+  - id: "no-pii-in-logs"
+    statement: "No PII or sensitive account details written to analytics or console logs."
+    audit: verifier
+    review_gate: blocking
+  - id: "enforce-design-tokens"
+    statement: "UI components must consume design system tokens instead of raw hex values."
+    audit: static
+    review_gate: advisory
+
+tiers:
+  D_triggers:
+    - "public API contract change"
+    - "new native permission request"
+    - "database schema or migration modification"
+  E_triggers:
+    - "production environment secrets or deployment key modification"
+    - "store release configuration changes"
+  C_needs_reviewer: "mobile-architecture-team"
+
+permissions:
+  deny_read:
+    - "**/*.keystore"
+    - "**/*.p12"
+    - "**/secrets/**"
+    - ".env*"
+  deny_cmd_patterns:
+    - "fastlane deploy"
+    - "pod trunk push"
+    - "rm -rf /"
+    - "./gradlew publish"
+  ask_cmd_patterns:
+    - "git push"
+    - "./gradlew assembleRelease"
+  ask_write_paths:
+    - "**/AndroidManifest.xml"
+    - "**/Info.plist"
+  allow_write_paths:
+    - "app/src/**"
+
+ticket_source:
+  type: "mcp"
+  mcp_connector: "Jira-Enterprise-Connector"
+  read_tools:
+    - "Jira_GetIssue"
+    - "Jira_ListComments"
+    - "Jira_GetAcceptanceCriteria"
+
+observability:
+  enabled: true
+  collector_endpoint: "https://otel-collector.enterprise.internal:4318/v1/traces"
+  service_name: "ai-sdlc-mobile-app"
+  sample_rate: 1.0

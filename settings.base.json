@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "_comment": "templates/settings.base.json — hydrated into .claude/settings.json by scripts/scaffold.mjs. Every '<<FROM_CONFIG:...>>' array entry below is a sentinel the scaffolder recognizes and replaces with the expanded rule list generated from this repo's project.config.yml permissions.* block. Never hand-edit a hydrated settings.json's deny/ask/allow arrays directly — edit project.config.yml and re-run the scaffolder, or the two will drift (spec section 9, criterion 3: zero command/path duplication).",
+  "permissions": {
+    "deny": [
+      "<<FROM_CONFIG:permissions.deny_read AS Read() RULES>>",
+      "<<FROM_CONFIG:permissions.deny_cmd_patterns AS Bash() RULES>>"
+    ],
+    "ask": [
+      "<<FROM_CONFIG:permissions.ask_cmd_patterns AS Bash() RULES>>",
+      "<<FROM_CONFIG:permissions.ask_write_paths AS Edit()+Write() RULES>>"
+    ],
+    "allow": [
+      "<<FROM_CONFIG:permissions.allow_write_paths AS Edit()+Write() RULES>>",
+      "Bash(git add:*)",
+      "Bash(git checkout -b:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/validate-config.mjs\" --config \"$CLAUDE_PROJECT_DIR/project.config.yml\""
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/implementor-git-guard.sh\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/verify-loop.sh\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/verify-loop.sh\""
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/verify-loop.sh\""
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-sdlc-framework.internal/project.config.schema.json",
+  "title": "AI-SDLC Framework project.config.yml",
+  "description": "Structural schema for the team-supplied bindings contract. Encodes AI-SDLC-FRAMEWORK-SPEC.md section 3. Semantic checks that JSON Schema cannot express cleanly (e.g. read-only verb enforcement on ticket_source.read_tools, duplicate hard_rules ids) are enforced separately in scripts/validate-config.mjs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "team", "stack", "verify_hook", "hard_rules", "tiers", "permissions", "ticket_source"],
+  "properties": {
+    "version": {
+      "const": 1,
+      "description": "Config contract version. Must equal 1 (spec rule 1)."
+    },
+    "team": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "git_remote", "branch_prefixes"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "git_remote": { "type": "string", "minLength": 1 },
+        "branch_prefixes": {
+          "type": "object",
+          "description": "Maps a ticket/task type to its branch prefix (e.g. feature -> \"feat/\", bug -> \"bug/\"). Coordinator forms branch names as <prefix><ticket-id> (agents/coordinator.md). feature and bug are required; add any other types (chore, hotfix, docs, ...) your team uses.",
+          "required": ["feature", "bug"],
+          "properties": {
+            "feature": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*/$" },
+            "bug": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*/$" }
+          },
+          "additionalProperties": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*/$" }
+        }
+      }
+    },
+    "stack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package_manager", "lint_cmd", "test_cmd", "extra_validate_cmd", "flags"],
+      "properties": {
+        "package_manager": { "type": "string", "minLength": 1 },
+        "lint_cmd": { "type": "string", "minLength": 1 },
+        "test_cmd": { "type": "string", "minLength": 1 },
+        "extra_validate_cmd": { "type": "string", "minLength": 1 },
+        "flags": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["no_install"],
+          "properties": {
+            "no_install": {
+              "const": true,
+              "description": "Must evaluate to true to block mid-session package downloads (spec rule 4)."
+            }
+          }
+        }
+      }
+    },
+    "verify_hook": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["include_glob", "test_pattern", "loop_budget"],
+      "properties": {
+        "include_glob": { "type": "string", "minLength": 1 },
+        "test_pattern": { "type": "string", "minLength": 1 },
+        "skip_globs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "default": []
+        },
+        "loop_budget": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5,
+          "description": "Positive integer, 1 <= loop_budget <= 5 (spec rule 3)."
+        }
+      }
+    },
+    "hard_rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "statement", "audit", "review_gate"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+          "statement": { "type": "string", "minLength": 1 },
+          "audit": { "type": "string", "enum": ["static", "verifier"] },
+          "review_gate": { "type": "string", "enum": ["blocking", "advisory"] }
+        }
+      }
+    },
+    "tiers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["D_triggers", "E_triggers", "C_needs_reviewer"],
+      "properties": {
+        "D_triggers": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "E_triggers": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "C_needs_reviewer": { "type": "string", "minLength": 1 }
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deny_read", "deny_cmd_patterns", "ask_cmd_patterns", "ask_write_paths", "allow_write_paths"],
+      "properties": {
+        "deny_read": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "deny_cmd_patterns": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "ask_cmd_patterns": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "ask_write_paths": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "allow_write_paths": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "ticket_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "description": "type == 'mcp' additionally requires mcp_connector and a non-empty read_tools[] — enforced in scripts/validate-config.mjs rather than here, since Ajv strict mode rejects an if/then branch that requires a property not locally redeclared in that branch.",
+      "properties": {
+        "type": { "type": "string", "enum": ["mcp", "manual"] },
+        "mcp_connector": { "type": "string", "minLength": 1 },
+        "read_tools": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "observability": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "collector_endpoint": { "type": "string", "minLength": 1 },
+        "service_name": { "type": "string", "minLength": 1 },
+        "sample_rate": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    }
+  }
+}

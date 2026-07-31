@@ -1,0 +1,76 @@
+# Starter project.config.yml for a Node/TypeScript/pnpm stack.
+# Copied verbatim into a new consuming repo by `node scripts/scaffold.mjs
+# --template node-pnpm` when that repo has no project.config.yml yet.
+# Edit every value below for your actual repo before your first task —
+# this is a starting point, not a finished config. In particular:
+# team.*, tiers.C_needs_reviewer, and ticket_source.* are almost
+# certainly wrong for your repo as shipped.
+version: 1
+
+team:
+  name: "CHANGE_ME-engineering"
+  git_remote: "git@github.com:CHANGE_ME/CHANGE_ME.git"
+  branch_prefixes:
+    feature: "feat/"
+    bug: "bug/"
+    chore: "chore/"
+    hotfix: "hotfix/"
+
+stack:
+  package_manager: "pnpm"
+  lint_cmd: "pnpm exec eslint {file}"
+  test_cmd: "pnpm exec jest --testPathPattern {base}"
+  extra_validate_cmd: "pnpm exec tsc --noEmit"
+  flags:
+    no_install: true
+
+verify_hook:
+  include_glob: "src/**/*.ts"
+  test_pattern: "{base}.test.ts"
+  skip_globs:
+    - "**/*.md"
+    - "**/dist/**"
+    - "**/node_modules/**"
+  loop_budget: 3
+
+hard_rules:
+  - id: "no-live-data"
+    statement: "No connections to live/production endpoints or databases."
+    audit: static
+    review_gate: blocking
+  - id: "no-pii-in-logs"
+    statement: "No PII or sensitive account details written to analytics or console logs."
+    audit: verifier
+    review_gate: blocking
+
+tiers:
+  D_triggers:
+    - "public API contract change"
+    - "database schema or migration modification"
+  E_triggers:
+    - "production environment secrets or deployment key modification"
+  C_needs_reviewer: "CHANGE_ME-architecture-team"
+
+permissions:
+  deny_read:
+    - ".env*"
+    - "**/secrets/**"
+    - "**/*.pem"
+  deny_cmd_patterns:
+    - "pnpm publish"
+    - "npm publish"
+    - "rm -rf /"
+  ask_cmd_patterns:
+    - "git commit"
+    - "git push"
+  ask_write_paths:
+    - "**/package.json"
+    - "**/.github/workflows/**"
+  allow_write_paths:
+    - "src/**"
+
+ticket_source:
+  type: "manual"
+
+observability:
+  enabled: false

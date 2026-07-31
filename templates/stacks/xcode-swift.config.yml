@@ -1,0 +1,82 @@
+# Starter project.config.yml for an iOS/Xcode/Swift stack.
+# Copied verbatim into a new consuming repo by `node scripts/scaffold.mjs
+# --template xcode-swift` when that repo has no project.config.yml yet.
+# Edit every value below for your actual repo before your first task —
+# this is a starting point, not a finished config. In particular:
+# team.*, tiers.C_needs_reviewer, and ticket_source.* are almost
+# certainly wrong for your repo as shipped.
+version: 1
+
+team:
+  name: "CHANGE_ME-engineering"
+  git_remote: "git@github.com:CHANGE_ME/CHANGE_ME.git"
+  branch_prefixes:
+    feature: "feat/"
+    bug: "bug/"
+    chore: "chore/"
+    hotfix: "hotfix/"
+
+stack:
+  package_manager: "spm"
+  lint_cmd: "swiftlint lint --path {file}"
+  test_cmd: "xcodebuild test -scheme CHANGE_ME -destination 'platform=iOS Simulator,name=iPhone 15' -only-testing:CHANGE_METests/{base}Tests"
+  extra_validate_cmd: "xcodebuild build -scheme CHANGE_ME"
+  flags:
+    no_install: true
+
+verify_hook:
+  include_glob: "CHANGE_ME/Sources/**/*.swift"
+  test_pattern: "{base}Tests.swift"
+  skip_globs:
+    - "**/*.md"
+    - "**/Generated/**"
+    - "**/DerivedData/**"
+    - "**/.build/**"
+  loop_budget: 3
+
+hard_rules:
+  - id: "no-live-data"
+    statement: "No connections to live/production endpoints or databases."
+    audit: static
+    review_gate: blocking
+  - id: "no-pii-in-logs"
+    statement: "No PII or sensitive account details written to analytics or console logs."
+    audit: verifier
+    review_gate: blocking
+
+tiers:
+  D_triggers:
+    - "public API contract change"
+    - "new native permission request (Info.plist capability)"
+    - "database schema or migration modification"
+  E_triggers:
+    - "production environment secrets or deployment key modification"
+    - "App Store release configuration changes"
+  C_needs_reviewer: "CHANGE_ME-architecture-team"
+
+permissions:
+  deny_read:
+    - "**/*.p12"
+    - "**/*.mobileprovision"
+    - "**/secrets/**"
+    - ".env*"
+  deny_cmd_patterns:
+    - "xcodebuild -exportArchive"
+    - "fastlane deploy"
+    - "pod trunk push"
+    - "rm -rf /"
+  ask_cmd_patterns:
+    - "git commit"
+    - "git push"
+    - "xcodebuild archive"
+  ask_write_paths:
+    - "**/Info.plist"
+    - "**/*.entitlements"
+  allow_write_paths:
+    - "CHANGE_ME/Sources/**"
+
+ticket_source:
+  type: "manual"
+
+observability:
+  enabled: false
