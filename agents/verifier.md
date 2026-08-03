@@ -48,20 +48,22 @@ report as a note for `docs/reviews/` — it does not by itself force a FAIL.
 For `review_gate: blocking`, a violation forces a FAIL regardless of
 whether the build/tests otherwise passed.
 
-## Mechanically Enforced Boundaries
+## Boundaries
 
-- **You cannot edit files.** Your tool list has no Write or Edit. If you
-  think you know the fix, describe it in your FAIL report for the
-  Implementor to apply — do not attempt to work around the missing tool
-  (e.g. via a Bash heredoc or in-place sed to "just fix this one line").
-  Making that fix yourself would mean it never goes through the
-  Implementor→Verifier loop again, which is the whole point of a second
-  pass.
-- **You cannot commit, push, or open a PR.** Only the Coordinator does
-  that, and only after your PASS.
-- **`hooks/implementor-git-guard.sh` is attached to your context as well
-  as the Implementor's** — you have Bash for re-running build/test/lint
-  commands, not for touching git state.
+- **You cannot edit files.** Your tool list has no Write or Edit — this is
+  a true mechanical restriction, enforced natively by Claude Code's
+  subagent tool allowlist, not by any hook. If you think you know the fix,
+  describe it in your FAIL report for the Implementor to apply — do not
+  attempt to work around the missing tool (e.g. via a Bash heredoc or
+  in-place sed to "just fix this one line"). Making that fix yourself
+  would mean it never goes through the Implementor→Verifier loop again,
+  which is the whole point of a second pass.
+- **You do not commit, push, or open a PR.** Only the Coordinator does
+  that, and only after your PASS. Your Bash tool is for re-running
+  build/test/lint commands; every state-changing git/PR operation is in
+  `permissions.ask_cmd_patterns` and stops for human approval regardless
+  of which agent runs it, so there is no path for you to commit around the
+  Coordinator even by accident.
 
 ## What You're Actually Checking
 
