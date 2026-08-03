@@ -9,6 +9,16 @@
 # vocabulary doesn't change per tech stack, so this hook ships as-is and
 # is never hydrated from project.config.yml.
 #
+# NOT WIRED BY DEFAULT: under this framework's standard shared-session
+# deployment (Implementor/Verifier run as in-process Task-tool subagents
+# sharing the Coordinator's settings), settings.base.json ships NO
+# PreToolUse entry for this hook. Separation of duties is instead enforced
+# by requiring human approval on every state-changing git/PR op — git
+# commit, git push, gh pr create all live in permissions.ask_cmd_patterns.
+# See docs/CONFORMANCE.md item B.1 for the full rationale. This file is
+# kept for the OTHER deployment model (below), not because it runs by
+# default.
+#
 # Scoping (READ THIS BEFORE WIRING IT UP): this script is deliberately
 # role-agnostic — it does not attempt to detect "am I the Coordinator" at
 # runtime. An earlier version tried an AI_SDLC_ROLE environment variable
@@ -17,18 +27,18 @@
 # tool calls, and a state FILE written by an agent's own Write/Edit/Bash
 # tools could just as easily be overwritten by that same (possibly
 # confused, possibly prompt-injected) agent to impersonate the
-# Coordinator — neither is a real mechanical boundary.
+# Coordinator — neither is a real mechanical boundary. That is exactly why
+# it cannot be wired project-wide in the shared-session model without also
+# firing for the Coordinator, and why the human-approval gate supersedes
+# it there.
 #
-# The guarantee instead comes from WHERE this hook is registered: attach
-# it only to the Implementor and Verifier subagent contexts (see
-# agents/implementor.md and agents/verifier.md), never to the
-# Coordinator's own (main-thread) context. The Coordinator is the one
-# role this hook must never fire for, and it achieves that by not being
-# wired there at all, not by recognizing the Coordinator and standing
-# down. scripts/scaffold.mjs and docs/CONFORMANCE.md both call out
-# verifying this attachment as a required post-scaffold check, since the
-# exact per-subagent hook-scoping mechanism can vary by Claude Code
-# version.
+# When this hook IS appropriate: a team running the SEPARATE-PROCESS
+# deployment model, where the Implementor and Verifier are launched as
+# their own `claude -p` invocations with their own settings scope. There,
+# wire this as a PreToolUse hook in the Implementor/Verifier settings
+# ONLY (never the Coordinator's), giving a true hard block on git writes
+# for those roles. The guarantee comes from WHERE it is registered, not
+# from the script recognizing a role.
 #
 # Fail-safe: inability to parse the hook payload blocks (exit 2), never
 # silently allows.
