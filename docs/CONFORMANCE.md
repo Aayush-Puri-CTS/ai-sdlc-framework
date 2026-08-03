@@ -58,29 +58,34 @@ them yourself; nothing here should be taken on faith.)
 
 ### 5. Separation of Duties
 
-**Check (Implementor):** as the Implementor, attempt `git commit`,
-`git push`, and a chained `<build cmd> && git commit`. All three must be
-blocked by `hooks/implementor-git-guard.sh`.
+**Check (state-changing git/PR requires a human):** confirm
+`project.config.yml`'s `permissions.ask_cmd_patterns` includes
+`"git commit"`, `"git push"`, and `"gh pr create"`, and that the hydrated
+`.claude/settings.json` `ask` list contains the corresponding
+`Bash(... :*)` rules. Then, as any agent, attempt `git commit` — it must
+stop for a human approval prompt, not run silently.
 **Check (Verifier):** confirm `agents/verifier.md`'s frontmatter `tools:`
 list has no `Write` or `Edit` — this is enforced natively by Claude Code's
-subagent tool restriction, not by a hook, so confirming the frontmatter is
-the actual check.
+subagent tool restriction, so confirming the frontmatter is the actual
+check.
 
-**Pass condition:** both hold, and `project.config.yml`'s
-`permissions.ask_cmd_patterns` includes `"git commit"` — see Section B
-item 1 for why that entry, specifically, is load-bearing for this
-guarantee under this framework's standing deployment model.
+**Pass condition:** both hold. Note this guarantee rests on the
+human-approval `ask` gate, not on the git-guard hook — see Section B item
+1 for why, and for the one deployment model where the hard-block hook is
+additionally available.
 
 ### 6. Schema Enforcement
 
 **Check:** run `node scripts/validate-config.mjs` against a config with
 (a) a hard rule missing `audit`/`review_gate`, (b) an empty
 `tiers.D_triggers`, (c) a `ticket_source.read_tools` entry containing
-`Create`/`Update`/`Delete`, (d) `loop_budget: 0` or `loop_budget: 6`.
+`Create`/`Update`/`Delete`, (d) `loop_budget: 0` or `loop_budget: 6`,
+(e) a `pull_request.required_labels` that omits `ai-assisted` (or a
+config missing the `pull_request` section entirely).
 
-**Pass condition:** all four are rejected with an actionable message and
-exit code 1. (Run against this exact matrix during Phase 1 — all four
-confirmed rejected.)
+**Pass condition:** all five are rejected with an actionable message and
+exit code 1. (Cases a–d were confirmed during Phase 1; case e was added
+with the PR-label governance requirement and confirmed the same way.)
 
 ### 7. Two-Phase Verification
 
@@ -112,25 +117,41 @@ oversight. "Resolved" means mechanically closed; "Accepted" means a known
 cost was consciously kept rather than engineered away; "Out of scope"
 means deliberately not built.
 
-### 1. `implementor-git-guard.sh`'s scope — RESOLVED (shared-session model)
+### 1. How separation of duties is enforced — RESOLVED (human-approval gate, not the git-guard hook)
 
-The hook cannot mechanically distinguish the Coordinator's Bash calls
-from the Implementor's/Verifier's when all three share one Claude Code
-settings scope (see the hook's own header comment for the two approaches
-that were tried and rejected: an env var, which doesn't survive across
-separate Bash tool calls, and a state file, which the same agent it's
-meant to restrict could just overwrite).
+A PreToolUse hook cannot mechanically distinguish the Coordinator's Bash
+calls from the Implementor's/Verifier's when all three share one Claude
+Code settings scope (see `hooks/implementor-git-guard.sh`'s own header
+comment for the two approaches that were tried and rejected: an env var,
+which doesn't survive across separate Bash tool calls, and a state file,
+which the same agent it's meant to restrict could just overwrite).
 
 **Decision:** this framework's standing model launches Implementor and
 Verifier as in-process Task-tool subagents sharing the Coordinator's own
-session settings (not separate headless `claude -p` invocations). The
-guard therefore applies to the Coordinator too, and every starter
-template ships `"git commit"` in `permissions.ask_cmd_patterns` alongside
-`"git push"` — every commit requires a human's approval click, via Claude
-Code's own permission engine, which is mechanically airtight regardless
-of which role is asking. **Check:** confirm `ask_cmd_patterns` includes
-`"git commit"` in any repo scaffolded from this framework; if it's
-missing, that repo's autonomous-commit guarantee is not actually closed.
+session settings (not separate headless `claude -p` invocations). Since no
+in-band signal can tell the roles apart in that model, the framework does
+not try to — it puts every state-changing git/PR operation (`git commit`,
+`git push`, `gh pr create`) in `permissions.ask_cmd_patterns`, so *each
+one requires an explicit human approval click regardless of which agent
+initiates it*. A human in the loop for every state change is the actual
+guarantee.
+
+Because that human-approval gate already covers every meaningful state
+change, the `hooks/implementor-git-guard.sh` PreToolUse hard-block was
+judged redundant in this model and is **no longer wired into
+`.claude/settings.json`** (`settings.base.json` ships no `PreToolUse`
+entry). The hook file is still vendored and remains useful for teams on
+the **separate-process deployment model** — where Implementor/Verifier run
+as their own `claude -p` invocations with their own settings scope, the
+guard *can* be scoped to just those contexts and provides a true hard
+block that the shared-session model can't. Such a team would add the
+`PreToolUse` wiring back to the Implementor/Verifier settings scope only.
+
+**Check:** confirm `ask_cmd_patterns` includes `"git commit"`,
+`"git push"`, and `"gh pr create"` in any repo scaffolded from this
+framework, and that they appear as `Bash(...:*)` rules in the hydrated
+`.claude/settings.json` `ask` list; if any is missing, that repo's
+human-in-the-loop guarantee for that operation is not actually closed.
 
 ### 2. `ticket_source.read_tools` least privilege — RESOLVED (enforced at the MCP authorization layer)
 

@@ -31,6 +31,20 @@ publish this as a package.
 - Your repo initialized as a git repo (the scaffolder doesn't require
   this, but the framework's separation-of-duties guarantees assume normal
   git usage downstream).
+- The GitHub CLI (`gh`), authenticated (`gh auth login`) — the
+  Coordinator opens the single per-unit-of-work PR (mandate step 7 in
+  `agents/coordinator.md`) via `gh`. Without it, the pipeline runs right
+  up to the PR step and then stalls there. `gh pr create` is a remote
+  operation, so like `git push`/`git commit` it lands under
+  `permissions.ask_cmd_patterns` — expect a human approval click when the
+  Coordinator opens the PR. Every PR is labeled with each entry in
+  `pull_request.required_labels` (the org-wide `ai-assisted` marker is
+  mandatory and enforced by `validate-config.mjs`). Create these labels in
+  the GitHub repo once during setup — `gh label create ai-assisted
+  --description "Opened via the AI-SDLC framework" --color 5319E7` — so the
+  first PR doesn't stall on a missing label (the Coordinator will also
+  create a missing label on the fly, but pre-creating it keeps the color/
+  description consistent across the repo).
 
 ## Step 1 — Run the scaffolder
 
@@ -106,7 +120,7 @@ human. At minimum, write:
 - **Escalation Contacts** — who gets paged on a Tier D/E stop. Don't
   leave this blank; an agent halting on Tier D needs to know who to tell.
 
-## Step 4 — Know what "shared-session" means for git commits
+## Step 4 — Know how git/PR operations are gated
 
 This framework's standing deployment model launches Implementor and
 Verifier as **in-process Task-tool subagents sharing the Coordinator's
@@ -114,18 +128,22 @@ own session settings** — not as separate headless `claude -p`
 invocations. That's a deliberate choice, not a per-team decision to make;
 don't try to run a repo in the separate-process model instead.
 
-The consequence: `hooks/implementor-git-guard.sh` (wired globally in
-`.claude/settings.json`) has no way to mechanically tell "the
-Coordinator's Bash call" apart from "the Implementor's Bash call" when
-all three share one settings scope (see that script's own header comment
-for why an env-var-based approach was tried and abandoned). So every
-starter template ships `"git commit"` in `permissions.ask_cmd_patterns`
-alongside `"git push"` — every commit, not just every push, needs a
-human's approval click. That's a strictly *stronger* guarantee than a
-spoofable role check would have been, just less autonomous for that one
-step. Don't remove `"git commit"` from `ask_cmd_patterns` thinking it's
-redundant with the guard — it's the actual mechanism keeping this
-guarantee airtight under this deployment model.
+The consequence: no hook or permission rule can tell "the Coordinator's
+Bash call" apart from "the Implementor's Bash call" when all three share
+one settings scope. So the framework doesn't try to — instead, every
+state-changing git/PR operation (`git commit`, `git push`, `gh pr create`)
+is in `permissions.ask_cmd_patterns`, meaning **each one stops for a human
+approval click regardless of which agent initiates it**. A human in the
+loop for every state change is the separation-of-duties guarantee here.
+Don't remove any of those three from `ask_cmd_patterns` thinking they're
+redundant — they *are* the mechanism.
+
+(The framework also vendors `hooks/implementor-git-guard.sh`, a
+PreToolUse hard-block git-guard, but it is **not wired into
+`.claude/settings.json`** by default — the human-approval gate above makes
+it redundant in the shared-session model. It stays available for teams who
+run the separate-process model and want a true hard block scoped to the
+Implementor/Verifier contexts; see `docs/CONFORMANCE.md` item B.1.)
 
 ## Step 5 — Wire (or defer) the ticket source
 
@@ -154,9 +172,10 @@ example if your team uses Zoho Sprints. Update `ticket_source` in
 5. On PASS, the Coordinator commits. On FAIL, it re-delegates with the
    Verifier's report.
 
-If step 3's hook never seems to fire, or step 5's commit is unexpectedly
-blocked, revisit Step 4 above before assuming something else is broken —
-deployment-shape mismatches are the most common first-day surprise.
+If step 3's hook never seems to fire, revisit Step 4 above before assuming
+something else is broken. On step 5, expect a human-approval prompt on the
+commit (and again on `git push` / `gh pr create`) — that prompt is the
+gate working as designed, not an error.
 
 ## Common Early Friction
 
@@ -166,8 +185,10 @@ deployment-shape mismatches are the most common first-day surprise.
   `verify_hook.loop_budget` consecutive failures (default 3), blocking
   stops and the file is logged to
   `.claude/hooks/.state/needs-human-review.log` instead — check there.
-- **The Implementor's git command was blocked and you expected it to
-  work.** Check the allowed subcommand list in
-  `hooks/implementor-git-guard.sh`'s header — it's a small, deliberately
-  short allowlist (`status`, `diff`, `log`, `show`, `blame`, `grep`,
-  `fetch`, `add`, `checkout -b`). Anything else is by design, not a bug.
+- **A commit / push / PR keeps prompting for approval.** That's the
+  separation-of-duties gate (Step 4): `git commit`, `git push`, and
+  `gh pr create` are in `permissions.ask_cmd_patterns` and require a human
+  click every time, by design. If you want a *harder* block that also
+  stops the Implementor from even attempting other git writes, that's the
+  optional `hooks/implementor-git-guard.sh` hard-block hook — not wired by
+  default; see `docs/CONFORMANCE.md` item B.1 for when to enable it.
