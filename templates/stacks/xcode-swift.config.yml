@@ -68,6 +68,7 @@ permissions:
   ask_cmd_patterns:
     - "git commit"
     - "git push"
+    - "gh pr create"
     - "xcodebuild archive"
   ask_write_paths:
     - "**/Info.plist"
@@ -77,6 +78,12 @@ permissions:
 
 ticket_source:
   type: "manual"
+
+# Governance labels applied to every PR the Coordinator opens. "ai-assisted"
+# is mandatory (enforced by scripts/validate-config.mjs); add more freely.
+pull_request:
+  required_labels:
+    - "ai-assisted"
 
 observability:
   enabled: false
