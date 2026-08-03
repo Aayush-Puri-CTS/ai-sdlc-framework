@@ -58,8 +58,8 @@ docs/CONFORMANCE.md       Platform audit checklist + standing decisions log
 
 ## Guarantees this framework enforces mechanically (not by prompt)
 
-- The Implementor cannot run a state-changing git command (`hooks/implementor-git-guard.sh`).
-- The Verifier cannot edit files (no `Write`/`Edit` in `agents/verifier.md`'s tool list).
+- Every state-changing git/PR operation (`git commit`, `git push`, `gh pr create`) requires an explicit human approval click — no agent can commit, push, or open a PR silently. This is the separation-of-duties gate under the standard shared-session deployment; the vendored `hooks/implementor-git-guard.sh` hard-block hook is available but *not wired by default* (see `docs/CONFORMANCE.md` item B.1).
+- The Verifier cannot edit files (no `Write`/`Edit` in `agents/verifier.md`'s tool list — enforced natively by Claude Code's subagent tool allowlist).
 - A missing or malformed `project.config.yml` blocks every hook (exit 2) — never a silent no-op.
 - Every hard rule is tagged `audit: static|verifier` and `review_gate: blocking|advisory`, enforced by `scripts/validate-config.mjs`.
 - Tier D/E changes hard-stop an agent regardless of team config — only the trigger *conditions* are team-supplied.
