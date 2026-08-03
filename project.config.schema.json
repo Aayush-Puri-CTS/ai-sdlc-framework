@@ -5,7 +5,7 @@
   "description": "Structural schema for the team-supplied bindings contract. Encodes AI-SDLC-FRAMEWORK-SPEC.md section 3. Semantic checks that JSON Schema cannot express cleanly (e.g. read-only verb enforcement on ticket_source.read_tools, duplicate hard_rules ids) are enforced separately in scripts/validate-config.mjs.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "team", "stack", "verify_hook", "hard_rules", "tiers", "permissions", "ticket_source"],
+  "required": ["version", "team", "stack", "verify_hook", "hard_rules", "tiers", "permissions", "ticket_source", "pull_request"],
   "properties": {
     "version": {
       "const": 1,
@@ -126,6 +126,19 @@
         "mcp_connector": { "type": "string", "minLength": 1 },
         "read_tools": {
           "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "pull_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required_labels"],
+      "description": "Governance labels the Coordinator must apply to every PR it opens (agents/coordinator.md, mandate step 7). required_labels must include the org-wide 'ai-assisted' marker — enforced in scripts/validate-config.mjs; a team may add more, but may not drop it.",
+      "properties": {
+        "required_labels": {
+          "type": "array",
+          "minItems": 1,
           "items": { "type": "string", "minLength": 1 }
         }
       }
