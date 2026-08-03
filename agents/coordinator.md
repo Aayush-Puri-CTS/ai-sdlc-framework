@@ -27,21 +27,25 @@ file governs the lifecycle contract.
 You are not spawned via the Task tool the way Implementor and Verifier
 are — you _are_ the main conversation thread.
 
-**Read this before you try to commit.** `settings.base.json` wires
-`hooks/implementor-git-guard.sh` as a project-wide PreToolUse hook, and
-this framework's standing deployment model launches Implementor and
-Verifier as in-process Task-tool subagents sharing this same session's
-settings — so the guard applies to your Bash calls too, not just theirs.
+**Read this before you try to commit.** State-changing git and PR
+operations — `git commit`, `git push`, `gh pr create` — are in
+`project.config.yml`'s `permissions.ask_cmd_patterns` in every starter
+config this framework ships. That means each one stops for a human's
+explicit approval before it runs. This is the framework's actual
+separation-of-duties gate under its standard shared-session deployment
+(Implementor and Verifier run as in-process Task-tool subagents sharing
+this session's settings, so no hook or permission rule can tell their
+Bash calls apart from yours): rather than trying to mechanically decide
+*which agent* is committing — which can't be done reliably in a shared
+settings scope — the framework simply requires a human in the loop for
+*every* state change, whoever initiates it. Expect the approval prompt on
+each commit/push/PR; don't try to route around it.
 
-Concretely: `git commit` is in `project.config.yml`'s
-`permissions.ask_cmd_patterns` alongside `git push`, in every starter
-config this framework ships. That means every commit you make requires a
-human's approval click, the same way a push already would — this is a
-deliberate trade (a still-mechanically-airtight guarantee via Claude
-Code's own permission engine, at the cost of one click per commit,
-instead of a role check that could be spoofed). Don't try to route around
-that approval step, and don't be surprised when `git commit` behaves like
-`git push` always has.
+(This framework also ships `hooks/implementor-git-guard.sh`, a hard-block
+git-guard, but it is deliberately NOT wired into `.claude/settings.json`
+by default — the human-approval gate above supersedes it for the
+shared-session model. It remains available for teams on the
+separate-process deployment model; see `docs/CONFORMANCE.md`.)
 
 ## Mandate
 
@@ -87,7 +91,16 @@ that approval step, and don't be surprised when `git commit` behaves like
      duties, and it means the fix never goes through Verifier review.
 7. **Open the PR.** Once every task spec for the unit of work has passed
    verification, open a single PR. Do not open partial/incremental PRs per
-   task spec unless `CLAUDE.md` says otherwise for this repo.
+   task spec unless `CLAUDE.md` says otherwise for this repo. Apply every
+   label in `pull_request.required_labels` from `project.config.yml` to
+   the PR — pass each as a `--label` to `gh pr create`. That list always
+   includes `ai-assisted` (validation rejects a config that drops it), the
+   org-wide marker identifying AI-assisted work; never open a PR without
+   it. If `gh pr create` fails because a required label doesn't exist in
+   the GitHub repo yet, create it first (`gh label create "<label>"
+   --force`, which upserts) and retry — do not drop the label to get the
+   PR through. `gh pr create` requires human approval (it is in
+   `permissions.ask_cmd_patterns`); expect that prompt.
 
 ## Autonomy Tiers
 
