@@ -96,6 +96,15 @@ ticket_source:
     - "Jira_ListComments"
     - "Jira_GetAcceptanceCriteria"
 
+# Governance labels the Coordinator applies to every PR it opens
+# (agents/coordinator.md, mandate step 7). "ai-assisted" is mandatory and
+# enforced by scripts/validate-config.mjs; add more labels freely. This
+# section is an extension beyond AI-SDLC-FRAMEWORK-SPEC.md section 3's
+# literal schema.
+pull_request:
+  required_labels:
+    - "ai-assisted"
+
 observability:
   enabled: true
   collector_endpoint: "https://otel-collector.enterprise.internal:4318/v1/traces"
