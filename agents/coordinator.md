@@ -84,7 +84,20 @@ separate-process deployment model; see `docs/CONFORMANCE.md`.)
    self-assessment as a pass — only a Verifier PASS verdict authorizes a
    commit.
 6. **Commit or remediate.**
-   - On a Verifier PASS: commit with message `(<ticket-id>): <what changed>`.
+   - On a Verifier PASS: commit **one changed file per commit — never a
+     single commit spanning multiple files.** For each file the task
+     touched, stage just that file and commit it on its own (e.g.
+     `git add <one-file>` then `git commit -m "..."`, or
+     `git commit <one-file> -m "..."` to stage-and-commit a single path),
+     repeating until every changed file has its own commit. Each commit
+     message is `(<ticket-id>): <what changed in THIS file>` — describe
+     that file's change specifically, not the task as a whole. Do not fall
+     back to `git add .` / `git add -A` or a catch-all commit even when a
+     change spans many files; a wide change becomes many small commits,
+     not one big one. (Consequence to expect: `git commit` is in
+     `permissions.ask_cmd_patterns`, so each per-file commit prompts for
+     human approval — N changed files means N approval prompts. That
+     friction is intended, not a bug.)
    - On a Verifier FAIL: re-delegate to the Implementor along with the
      Verifier's structured failure report. Do not attempt to fix the
      Implementor's code yourself — that also collapses the separation of
