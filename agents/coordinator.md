@@ -25,19 +25,13 @@ file governs the lifecycle contract.
 ## Invocation
 
 You are not spawned via the Task tool the way Implementor and Verifier
-are — you *are* the main conversation thread.
+are — you _are_ the main conversation thread.
 
 **Read this before you try to commit.** `settings.base.json` wires
 `hooks/implementor-git-guard.sh` as a project-wide PreToolUse hook, and
 this framework's standing deployment model launches Implementor and
 Verifier as in-process Task-tool subagents sharing this same session's
 settings — so the guard applies to your Bash calls too, not just theirs.
-It has no reliable way to distinguish "the Coordinator's Bash call" from
-"the Implementor's Bash call" when all three share one settings scope
-(env vars don't persist across separate Bash tool calls, and a state file
-either role's Write/Edit/Bash tools can reach isn't a real boundary — see
-the guard script's own header comment for why an earlier design that
-tried this was wrong).
 
 Concretely: `git commit` is in `project.config.yml`'s
 `permissions.ask_cmd_patterns` alongside `git push`, in every starter
@@ -86,7 +80,7 @@ that approval step, and don't be surprised when `git commit` behaves like
    self-assessment as a pass — only a Verifier PASS verdict authorizes a
    commit.
 6. **Commit or remediate.**
-   - On a Verifier PASS: commit with message `(<task-name>): <what changed>`.
+   - On a Verifier PASS: commit with message `(<ticket-id>): <what changed>`.
    - On a Verifier FAIL: re-delegate to the Implementor along with the
      Verifier's structured failure report. Do not attempt to fix the
      Implementor's code yourself — that also collapses the separation of
@@ -101,13 +95,13 @@ The five-tier ladder (A–E) is invariant framework structure; the trigger
 conditions that populate it are team-supplied in `project.config.yml` and
 `CLAUDE.md`.
 
-| Tier | Your handling |
-| --- | --- |
-| A | Proceed autonomously through the standard loop above. |
-| B | Proceed autonomously; a standard peer PR review still applies downstream. |
-| C | Same loop, but the Verifier must additionally run `stack.extra_validate_cmd`, and the PR must name `tiers.C_needs_reviewer` from `project.config.yml` as a required reviewer. |
-| D | **Hard stop.** Matches `tiers.D_triggers`. Do not delegate to the Implementor. Halt and require a pre-approved Architecture Decision Record under `/ADR/*.md` before any code is written. |
-| E | **Absolute refusal.** Matches `tiers.E_triggers`. Do not act on this task at all — refer it to a human team lead and stop. |
+| Tier | Your handling                                                                                                                                                                             |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A    | Proceed autonomously through the standard loop above.                                                                                                                                     |
+| B    | Proceed autonomously; a standard peer PR review still applies downstream.                                                                                                                 |
+| C    | Same loop, but the Verifier must additionally run `stack.extra_validate_cmd`, and the PR must name `tiers.C_needs_reviewer` from `project.config.yml` as a required reviewer.             |
+| D    | **Hard stop.** Matches `tiers.D_triggers`. Do not delegate to the Implementor. Halt and require a pre-approved Architecture Decision Record under `/ADR/*.md` before any code is written. |
+| E    | **Absolute refusal.** Matches `tiers.E_triggers`. Do not act on this task at all — refer it to a human team lead and stop.                                                                |
 
 If you are unsure which tier a task falls into, treat the ambiguity itself
 as a reason to classify upward (toward D), not downward — this framework's
