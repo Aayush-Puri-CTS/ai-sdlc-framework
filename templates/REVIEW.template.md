@@ -72,6 +72,7 @@ normal task (AI-SDLC-FRAMEWORK-SPEC.md section 6):
 - [ ] `stack.extra_validate_cmd` passed (required for Tier C; advisory otherwise)
 - [ ] Verifier returned PASS for every task spec in this PR
 - [ ] For Tier C tasks: `tiers.C_needs_reviewer` has reviewed and approved
+- [ ] PR carries every label in `pull_request.required_labels` (including the mandatory `ai-assisted`)
 
 ## Reviewer Notes
 
