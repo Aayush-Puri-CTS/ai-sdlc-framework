@@ -61,6 +61,19 @@ not hand-maintained.
 
 <!-- FROM_CONFIG:branch_prefixes_list:END -->
 
+## Pull Request Labels
+
+Every PR the Coordinator opens carries these labels (sourced from
+`project.config.yml`'s `pull_request.required_labels`, not
+hand-maintained). `ai-assisted` is mandatory org-wide and cannot be
+dropped.
+
+<!-- FROM_CONFIG:pull_request_labels_list:BEGIN -->
+
+<<FROM_CONFIG:pull_request_labels_list>>
+
+<!-- FROM_CONFIG:pull_request_labels_list:END -->
+
 ## Architecture Overview
 
 <<TEAM_AUTHORED: Describe this repo's architecture in 1-3 paragraphs —
