@@ -86,6 +86,10 @@ function renderBranchPrefixesList(branchPrefixes) {
     .join('\n');
 }
 
+function renderPullRequestLabelsList(requiredLabels) {
+  return requiredLabels.map((label) => `- \`${label}\``).join('\n');
+}
+
 function buildFromConfigValues(config) {
   return {
     'team.name': config.team.name,
@@ -99,6 +103,7 @@ function buildFromConfigValues(config) {
     tier_d_triggers_checklist: renderTriggerChecklist(config.tiers.D_triggers),
     tier_e_triggers_checklist: renderTriggerChecklist(config.tiers.E_triggers),
     branch_prefixes_list: renderBranchPrefixesList(config.team.branch_prefixes),
+    pull_request_labels_list: renderPullRequestLabelsList(config.pull_request.required_labels),
   };
 }
 

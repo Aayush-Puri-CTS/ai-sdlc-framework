@@ -52,8 +52,26 @@ function fail(messages) {
 // rules. Runs defensively — every access is guarded so a config missing
 // or mis-shaping a field never throws here (the schema pass already
 // reports missing/mis-shaped fields; this only adds checks schema can't).
+// The org-wide governance label every PR must carry so AI-assisted work is
+// uniformly identifiable across every consuming repo. A team may add more
+// labels, but this one is not theirs to drop — hence a hard check here
+// rather than leaving it to the schema (which can't require a specific
+// array member).
+const REQUIRED_PR_LABEL = 'ai-assisted';
+
 function semanticChecks(config) {
   const errors = [];
+
+  // Every repo must require the org-wide "ai-assisted" PR label. Checked
+  // here because JSON Schema can't cleanly assert "this array must contain
+  // this specific value".
+  if (config?.pull_request && Array.isArray(config.pull_request.required_labels)) {
+    if (!config.pull_request.required_labels.includes(REQUIRED_PR_LABEL)) {
+      errors.push(
+        `pull_request.required_labels must include "${REQUIRED_PR_LABEL}" — every PR the Coordinator opens must carry the org-wide AI-assisted marker. Add it (you may keep your other labels too).`
+      );
+    }
+  }
 
   // Duplicate hard_rules ids break traceability between REVIEW.md gates
   // and the rule that produced them.
