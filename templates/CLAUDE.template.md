@@ -42,7 +42,7 @@ only this team's specific content.
 
 ## Stack
 
-- Package manager: `<!-- FROM_CONFIG:stack.package_manager:BEGIN --><<FROM_CONFIG:stack.package_manager>><!-- FROM_CONFIG:stack.package_manager:END -->`
+- Package manager: <!-- FROM_CONFIG:stack.package_manager:BEGIN --><<FROM_CONFIG:stack.package_manager>><!-- FROM_CONFIG:stack.package_manager:END -->
 - Build/lint/test commands: defined in `project.config.yml` under `stack.*`
   — do not copy them here; if you need to reference a command in prose,
   name the config key (e.g. "run `stack.test_cmd`"), not the literal
@@ -56,7 +56,9 @@ this table is sourced from `project.config.yml`'s `team.branch_prefixes`,
 not hand-maintained.
 
 <!-- FROM_CONFIG:branch_prefixes_list:BEGIN -->
+
 <<FROM_CONFIG:branch_prefixes_list>>
+
 <!-- FROM_CONFIG:branch_prefixes_list:END -->
 
 ## Architecture Overview
@@ -84,7 +86,9 @@ blocks the pipeline or is merely advisory (AI-SDLC-FRAMEWORK-SPEC.md
 section 7).
 
 <!-- FROM_CONFIG:hard_rules_table:BEGIN -->
+
 <<FROM_CONFIG:hard_rules_table>>
+
 <!-- FROM_CONFIG:hard_rules_table:END -->
 
 <!--
@@ -102,16 +106,20 @@ from `project.config.yml`'s `tiers` block.
 **Tier D triggers (hard stop — requires a pre-approved ADR under `/ADR/*.md`):**
 
 <!-- FROM_CONFIG:tier_d_triggers_list:BEGIN -->
+
 <<FROM_CONFIG:tier_d_triggers_list>>
+
 <!-- FROM_CONFIG:tier_d_triggers_list:END -->
 
 **Tier E triggers (absolute refusal — referred to a human team lead):**
 
 <!-- FROM_CONFIG:tier_e_triggers_list:BEGIN -->
+
 <<FROM_CONFIG:tier_e_triggers_list>>
+
 <!-- FROM_CONFIG:tier_e_triggers_list:END -->
 
-**Tier C required reviewer:** `<!-- FROM_CONFIG:tiers.C_needs_reviewer:BEGIN --><<FROM_CONFIG:tiers.C_needs_reviewer>><!-- FROM_CONFIG:tiers.C_needs_reviewer:END -->`
+**Tier C required reviewer:** <!-- FROM_CONFIG:tiers.C_needs_reviewer:BEGIN --><<FROM_CONFIG:tiers.C_needs_reviewer>><!-- FROM_CONFIG:tiers.C_needs_reviewer:END -->
 
 ## Escalation Contacts
 
