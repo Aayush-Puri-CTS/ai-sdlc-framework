@@ -16,6 +16,14 @@
 # which shows a single team.default_branch_prefix string. Added so
 # feature/bug/etc. tickets branch under distinct prefixes
 # (agents/coordinator.md is where this is actually consumed).
+#
+# Note: permissions.ask_cmd_patterns includes "git commit" and
+# "gh pr create" alongside "git push" — beyond what spec section 3's
+# literal example shows, but required by scripts/validate-config.mjs
+# (every one of the git-commit/git-push/gh-pr-create triad must gate on
+# human approval — see docs/CONFORMANCE.md item B.1 for why this, not a
+# hook, is what actually closes that guarantee under this framework's
+# standard deployment model).
 version: 1
 
 team:
@@ -80,7 +88,9 @@ permissions:
     - "rm -rf /"
     - "./gradlew publish"
   ask_cmd_patterns:
+    - "git commit"
     - "git push"
+    - "gh pr create"
     - "./gradlew assembleRelease"
   ask_write_paths:
     - "**/AndroidManifest.xml"
