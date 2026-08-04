@@ -65,10 +65,26 @@ This:
    templates into `.claude/` and `ADR/` in your repo.
 2. Writes a starter `project.config.yml` (only if one doesn't already
    exist — it will never overwrite yours on a second run).
-3. Installs `js-yaml`/`ajv` (`npm install`) so the tooling actually runs.
+3. Installs `js-yaml`/`ajv`/`minimatch` (`npm install`) so the tooling
+   actually runs.
 4. Validates the config and hydrates `CLAUDE.md`, `REVIEW.md`, and
    `.claude/settings.json` from it.
 5. Prints every `<<TEAM_AUTHORED:...>>` stub still waiting on a human.
+
+**Adopting into a repo that already uses Claude Code for something else?**
+This is handled automatically, not something you need to prepare for: a
+pre-existing `.claude/agents/*.md` or `.claude/hooks/*` that differs from
+what we'd vendor is moved aside (never deleted), not overwritten; a
+pre-existing `.claude/settings.json` is merged — anything it has that
+`project.config.yml` can't express lands in `.claude/settings.local.json`,
+which this scaffolder never touches again. The one case requiring your
+input: a pre-existing `CLAUDE.md`/`REVIEW.md` with unrelated content is
+refused by default (you'll get a clear message) rather than silently
+gaining none of the framework's governance content — pass
+`--adopt-existing` to append the framework's required sections below your
+existing content instead of refusing, if you'd rather not rename the file
+and start clean. See `docs/CONFORMANCE.md` Section B items 6–8 and Section
+D for the full behavior and its documented limits.
 
 ## Step 2 — Edit `project.config.yml`
 
