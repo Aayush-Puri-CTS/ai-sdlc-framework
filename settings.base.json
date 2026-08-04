@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "_comment": "templates/settings.base.json — hydrated into .claude/settings.json by scripts/scaffold.mjs. Every '<<FROM_CONFIG:...>>' array entry below is a sentinel the scaffolder recognizes and replaces with the expanded rule list generated from this repo's project.config.yml permissions.* block. Never hand-edit a hydrated settings.json's deny/ask/allow arrays directly — edit project.config.yml and re-run the scaffolder, or the two will drift (spec section 9, criterion 3: zero command/path duplication).",
+  "_comment": "templates/settings.base.json — hydrated into .claude/settings.json by scripts/scaffold.mjs. Every '<<FROM_CONFIG:...>>' array entry below is a sentinel the scaffolder recognizes and replaces with the expanded rule list generated from this repo's project.config.yml permissions.* block. Never hand-edit a hydrated settings.json's deny/ask/allow arrays directly — edit project.config.yml and re-run the scaffolder, or the two will drift (spec section 9, criterion 3: zero command/path duplication). If the target repo already has an unrelated settings.json (no $ai_sdlc_framework_managed signature — added automatically by scaffold.mjs, not present in this template), the scaffolder migrates whatever permission rules it can't derive from project.config.yml into .claude/settings.local.json once, rather than overwriting them; see docs/CONFORMANCE.md.",
   "agent": "coordinator",
   "permissions": {
     "deny": [
