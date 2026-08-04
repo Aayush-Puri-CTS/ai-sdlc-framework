@@ -227,6 +227,77 @@ $(cat <consuming-repo>/.claude/.ai-sdlc-version)..HEAD`. A repo predating
 this fix has no `.claude/.ai-sdlc-version` file at all — treat that
 absence itself as "unknown drift risk, re-scaffold to find out."
 
+**Correction (see Section D):** `.claude/.ai-sdlc-version` absence is
+*not*, on its own, "this repo has never adopted this framework" — a repo
+predating this fix (including this framework's own two real pilot repos)
+is in exactly that state despite being fully, legitimately adopted.
+`scripts/scaffold.mjs` corroborates it with `project.config.yml`'s
+presence before treating a target directory as brand new to the
+framework; see Section D item 1.
+
+### 6. Vendored hook groups in `.claude/settings.json` are permanently append-only — ACCEPTED
+
+`hydrateSettings()` merges our own hook groups (from `settings.base.json`)
+into whatever `hooks.<EventName>` array already exists, matching identity
+by which script's basename a group's command targets (`verify-loop.sh`,
+`validate-config.mjs`), not the exact command string — so a future flag
+change to one of our own scripts still correctly replaces the stale group
+rather than looking "not present" and duplicating it.
+
+**Decision:** the practical consequence is that a team manually deleting
+one of our shipped hook groups does not stay deleted — it's re-appended
+on the very next scaffold run. This is the same trade-off this framework
+already applies to `permissions.*` (Section C from the prior pass), not a
+new kind of risk, but it has no `settings.local.json`-style escape hatch
+of its own: nothing in this codebase merges hooks in from
+`settings.local.json`, only permissions. **Check:** if a hook group looks
+like it's "not sticking," this is why — there is currently no supported
+way to permanently disable one of our shipped hooks short of forking
+`settings.base.json` itself.
+
+### 7. Pre-existing, foreign `permissions.*` content survives via `settings.local.json`, never `settings.json` — RESOLVED
+
+An earlier design considered merging a pre-existing, non-framework
+`settings.json`'s foreign `deny`/`ask`/`allow` entries directly into the
+newly-hydrated `settings.json`. An adversarial design review caught the
+bug before it shipped: `permissions.*` is always fully regenerated from
+`settings.base.json` + `project.config.yml` on *every* run (needed so a
+config entry that's later removed actually disappears) — so anything
+merged straight into `settings.json` on a first "adopt this foreign file"
+run would have been silently wiped by that same regeneration on the very
+next run, one step later than the bug the merge was meant to fix.
+
+**Decision:** on first encountering a `settings.json` that lacks this
+framework's `$ai_sdlc_framework_managed` signature key, any of its
+`permissions.*` entries we would not generate ourselves are migrated into
+`.claude/settings.local.json` instead — the one file this scaffolder
+never regenerates, so content routed there survives every future run
+unconditionally. This is the same escape hatch already documented for a
+team's own post-adoption additions; it's now also where pre-adoption
+content goes. **Check:** after adopting into a repo with a pre-existing
+`settings.json`, confirm any of its custom permission rules landed in
+`.claude/settings.local.json`, not `.claude/settings.json`, and re-run
+the scaffolder once more to confirm they're still there afterward (this
+is the exact scenario the caught bug would have broken).
+
+### 8. `--adopt-existing` produces a two-part `CLAUDE.md`/`REVIEW.md` requiring manual review — ACCEPTED
+
+A pre-existing `CLAUDE.md`/`REVIEW.md` with no `FROM_CONFIG` markers is
+refused by default (prose can't be safely auto-merged) — `--adopt-existing`
+appends the framework's required sections below a delimiter instead of
+refusing, so nothing existing is lost, but the two halves are not
+reconciled with each other.
+
+**Decision:** this is offered as the fast-but-messier alternative to the
+recommended default (rename the existing file aside, re-run, and manually
+repopulate the `<<TEAM_AUTHORED:...>>` stubs from the renamed copy into
+one coherent file) — not a substitute for it. A team using
+`--adopt-existing` should expect, and is told explicitly in the run's
+output, to reconcile duplicate or contradictory section headings (e.g.
+two `## Coding Conventions` sections) by hand. **Check:** after
+`--adopt-existing`, read the resulting file once, deliberately, before
+the first task — this framework won't do it for you.
+
 ## C. Fixes applied 2026-08-04 (`framework-reviews/FRAMEWORK-REVIEW.md`)
 
 A review cross-checked against two real consuming repos found several
@@ -292,3 +363,55 @@ authored in; each needs `git commit`/`gh pr create` added to
 replaced. Re-scaffolding either (`node scripts/scaffold.mjs --target
 <path>`, no `--template` needed) picks up every fix above and gets a
 version stamp for the first time.
+
+## D. Fixes applied — safe adoption into pre-existing content
+
+Before this pass, `scripts/scaffold.mjs` assumed every path it wrote to
+was either empty or already framework-owned — three ways that broke,
+roughly in order of how bad the failure was:
+
+- **`.claude/agents/**`, `.claude/hooks/**`, `.claude/ticket-source/**`,
+  `.claude/templates/**`, `ADR/0000-template.md`,
+  `project.config.schema.json`, `scripts/validate-config.mjs`** were
+  vendored via `cpSync(..., {recursive: true})`, whose default
+  `force: true` silently overwrites anything already at that path.
+- **`.claude/settings.json`** was always fully regenerated from
+  `settings.base.json` with zero awareness of whether a pre-existing file
+  was ours or a team's own, unrelated Claude Code config.
+- **`CLAUDE.md`/`REVIEW.md`**: a pre-existing file with no `FROM_CONFIG`
+  markers silently received no framework content at all while the run
+  still reported success.
+
+Fixed:
+
+1. **First-adoption detection** — `isFirstAdoption` requires BOTH
+  `.claude/.ai-sdlc-version` AND `project.config.yml` to be absent (see
+  Section B item 5's correction above); this specifically avoids
+  misclassifying an already-adopted repo that predates version-stamping.
+2. **Invariant-core paths** — on first adoption only, a pre-existing file
+  at one of these paths is compared byte-for-byte against what would be
+  vendored; if identical, overwritten silently (not a conflict); if
+  different, moved aside to `<name>.pre-ai-sdlc-framework.<ext>` (never
+  deleted) before vendoring ours in its place. On every later run,
+  unconditional overwrite, exactly as before this fix — this safety net
+  protects whatever existed the moment *before* adoption, not a team's
+  later hand-edits to a vendored file.
+3. **`.claude/settings.json` merge** — see Section B items 6–7.
+4. **`CLAUDE.md`/`REVIEW.md`** — see Section B item 8. The marker-presence
+  check is a standing invariant (runs every scaffold, not just on first
+  adoption), since the underlying bug (markers absent -> silent no-op) can
+  happen post-adoption too.
+5. **`--with-ci` (new, opt-in, default off)** — vendors
+  `.github/workflows/ai-sdlc-validate.yml` (runs
+  `validate-config.mjs --strict` on push/PR — the CI posture is strict,
+  the local `SessionStart` posture is warn-only, deliberately) and
+  `.github/PULL_REQUEST_TEMPLATE/ai-sdlc.md` (a *named* template, so it
+  never replaces or collides with a repo's own default PR template). Off
+  by default because CI wiring is more consequential than the rest of
+  scaffolding — an explicit choice, not a silent addition.
+
+**Check:** `test/adopt-existing.test.mjs` exercises every scenario above,
+including the exact false-positive (item 1) and the exact silent-wipe bug
+(item 3, Section B item 7) an adversarial design review caught before
+either shipped — read that file's test names for the full list rather
+than re-deriving the scenarios by hand.
