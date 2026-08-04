@@ -1,0 +1,30 @@
+# Vendored by scripts/scaffold.mjs (--with-ci) into
+# .github/workflows/ai-sdlc-validate.yml — a distinctively-named workflow
+# file so it coexists with any other CI this repo already has (GitHub
+# Actions supports many independent workflow files; nothing here replaces
+# or depends on your existing workflows).
+#
+# Runs the exact same check every SessionStart already runs locally
+# (scripts/validate-config.mjs), but with --strict: a config that's fine
+# to warn-and-continue on for a human's interactive session (a fresh
+# CHANGE_ME placeholder, a glob that doesn't match anything YET) is a real
+# problem once it's committed — see docs/CONFORMANCE.md's Schema
+# Enforcement section for why --strict is the CI posture and plain
+# (warn-only) is the local-session posture, not the other way around.
+name: AI-SDLC config validation
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  validate-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+      - run: npm ci
+      - run: node scripts/validate-config.mjs --config project.config.yml --strict
