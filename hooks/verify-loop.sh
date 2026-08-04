@@ -52,10 +52,36 @@ escape_sed_repl() {
   printf '%s' "$1" | sed 's/[&\\|]/\\&/g'
 }
 
-# Substitutes the {file} / {base} placeholders used throughout
-# stack.lint_cmd, stack.test_cmd, and verify_hook.test_pattern.
-# Requires REL_PATH and BASE_NAME to already be set by the caller.
-substitute_placeholders() {
+# Wraps $1 in single quotes for safe use as ONE shell word, escaping any
+# embedded single quote as '\'' (close quote, escaped literal quote,
+# reopen quote) — the standard POSIX idiom, mirroring config-reader.mjs's
+# shQuote(). Needed because REL_PATH/BASE_NAME come from tool_input, which
+# is agent-controlled, not team-authored — a filename like
+# "x; rm -rf ~ #.kt" must reach `eval` as one literal argument, never as
+# shell syntax.
+shell_quote() {
+  printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
+# Substitutes {file} / {base} for values that end up inside `eval`
+# (LINT_CMD / TEST_CMD). Each value is shell-quoted FIRST, then the
+# already-quoted result is sed-escaped — order matters: sed's own
+# unescaping reconstructs exactly the quoted text, so the quoting must be
+# the innermost layer, or the escaping-for-sed and quoting-for-shell steps
+# fight each other. Requires REL_PATH and BASE_NAME to already be set.
+substitute_for_eval() {
+  _file_q=$(escape_sed_repl "$(shell_quote "$REL_PATH")")
+  _base_q=$(escape_sed_repl "$(shell_quote "$BASE_NAME")")
+  printf '%s' "$1" | sed "s|{file}|$_file_q|g; s|{base}|$_base_q|g"
+}
+
+# Substitutes {file} / {base} for values that are only ever glob-matched
+# or filesystem-tested (verify_hook.test_pattern) — NEVER eval'd. Must
+# stay unquoted: every real test_pattern is a plain literal template like
+# "{base}Test.kt" with no wildcards, and shell-quoting the substituted
+# value would wrap it in literal apostrophes that then fail to match
+# anything, silently disabling co-located-test detection framework-wide.
+substitute_for_pattern() {
   _file_esc=$(escape_sed_repl "$REL_PATH")
   _base_esc=$(escape_sed_repl "$BASE_NAME")
   printf '%s' "$1" | sed "s|{file}|$_file_esc|g; s|{base}|$_base_esc|g"
@@ -98,29 +124,44 @@ run_phase1() {
     *) REL_PATH=$FILE_PATH ;;
   esac
 
-  # Out of scope for this hook entirely — not in include_glob. $INCLUDE_GLOB
-  # is intentionally unquoted here: case patterns are not subject to field
-  # splitting, so this is the standard, safe way to use it as a glob.
-  # shellcheck disable=SC2254  # intentional: $INCLUDE_GLOB is used AS the glob pattern here.
-  case "$REL_PATH" in
-    $INCLUDE_GLOB) : ;;
-    *) exit 0 ;;
-  esac
-
-  # Explicitly excluded even though it matched include_glob. $SKIP_GLOBS is
-  # intentionally unquoted in the `for` so it splits into individual glob
-  # tokens (globs are assumed not to contain spaces).
-  for _pat in $SKIP_GLOBS; do
-    # shellcheck disable=SC2254  # intentional: $_pat is used AS the glob pattern here.
-    case "$REL_PATH" in
-      $_pat) exit 0 ;;
-    esac
-  done
-
-  # {base} = filename without directory or extension, for {base}Test-style
-  # placeholders in test_cmd / test_pattern.
+  # {base} = filename without directory or extension; FILE_BASENAME keeps
+  # the extension. Computed here (earlier than strictly needed for
+  # include/skip alone) so TEST_FILE_PATTERN and FILE_BASENAME are both
+  # ready for the single combined glob-match.mjs call below, rather than
+  # needing a second node invocation later just for the test-pattern
+  # question.
   BASE_NAME=${REL_PATH##*/}
   BASE_NAME=${BASE_NAME%.*}
+  FILE_BASENAME=${REL_PATH##*/}
+  TEST_FILE_PATTERN=$(substitute_for_pattern "$TEST_PATTERN")
+
+  # One `node` call answers all three glob questions (include, skip,
+  # "is this file itself the test") via real minimatch semantics —
+  # POSIX `case` patterns don't support brace alternation at all and
+  # don't implement minimatch's globstar rules, which caused a real,
+  # total Phase-1 outage in a consuming repo (see hooks/lib/glob-match.mjs
+  # for the full explanation). `set --` builds a variable-length argument
+  # list (one --skip per configured skip glob) the POSIX-portable way.
+  set -- --path "$REL_PATH" --basename "$FILE_BASENAME" --include "$INCLUDE_GLOB"
+  for _pat in $SKIP_GLOBS; do
+    set -- "$@" --skip "$_pat"
+  done
+  set -- "$@" --test-pattern "$TEST_FILE_PATTERN"
+  if ! GLOB_MATCH_OUT=$(node "$LIB_DIR/glob-match.mjs" "$@" 2>&1); then
+    echo "verify-loop.sh: glob-match.mjs failed: $GLOB_MATCH_OUT" >&2
+    exit 2
+  fi
+  eval "$GLOB_MATCH_OUT"
+
+  # Out of scope for this hook entirely — not in include_glob.
+  if [ "$INCLUDE_MATCH" != "true" ]; then
+    exit 0
+  fi
+
+  # Explicitly excluded even though it matched include_glob.
+  if [ "$SKIP_MATCH" = "true" ]; then
+    exit 0
+  fi
 
   # Loop-budget bookkeeping is per session+file so two files (or two
   # sessions editing the same file) never share a counter.
@@ -130,7 +171,7 @@ run_phase1() {
   [ -f "$STATE_FILE" ] && ATTEMPT_COUNT=$(cat "$STATE_FILE" 2>/dev/null)
   case "$ATTEMPT_COUNT" in *[!0-9]*|'') ATTEMPT_COUNT=0 ;; esac
 
-  LINT_RESOLVED=$(substitute_placeholders "$LINT_CMD")
+  LINT_RESOLVED=$(substitute_for_eval "$LINT_CMD")
   LINT_OUTPUT=$(cd "$REPO_ROOT" && eval "$LINT_RESOLVED" 2>&1)
   LINT_STATUS=$?
 
@@ -139,26 +180,22 @@ run_phase1() {
   if [ "$LINT_STATUS" -eq 0 ]; then
     # Only run the (usually slower) test command once lint has already
     # passed — fail fast, and avoid reporting the same break twice.
-    TEST_FILE_PATTERN=$(substitute_placeholders "$TEST_PATTERN")
     case "$REL_PATH" in
       */*) TEST_DIR=${REL_PATH%/*} ;;
       *) TEST_DIR="." ;;
     esac
 
-    FILE_BASENAME=${REL_PATH##*/}
     HAS_TEST=0
-    # shellcheck disable=SC2254  # intentional: $TEST_FILE_PATTERN is used AS the glob pattern here.
-    case "$FILE_BASENAME" in
+    if [ "$TEST_SELF_MATCH" = "true" ]; then
       # The edited file already matches test_pattern itself — it IS the
       # test, so verify it directly rather than looking for a companion.
-      $TEST_FILE_PATTERN) HAS_TEST=1 ;;
-      *)
-        [ -f "$REPO_ROOT/$TEST_DIR/$TEST_FILE_PATTERN" ] && HAS_TEST=1
-        ;;
-    esac
+      HAS_TEST=1
+    elif [ -f "$REPO_ROOT/$TEST_DIR/$TEST_FILE_PATTERN" ]; then
+      HAS_TEST=1
+    fi
 
     if [ "$HAS_TEST" = "1" ]; then
-      TEST_RESOLVED=$(substitute_placeholders "$TEST_CMD")
+      TEST_RESOLVED=$(substitute_for_eval "$TEST_CMD")
       TEST_OUTPUT=$(cd "$REPO_ROOT" && eval "$TEST_RESOLVED" 2>&1)
       TEST_STATUS=$?
     else
