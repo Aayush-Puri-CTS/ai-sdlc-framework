@@ -5,11 +5,21 @@
   "permissions": {
     "deny": [
       "<<FROM_CONFIG:permissions.deny_read AS Read() RULES>>",
-      "<<FROM_CONFIG:permissions.deny_cmd_patterns AS Bash() RULES>>"
+      "<<FROM_CONFIG:permissions.deny_cmd_patterns AS Bash() RULES>>",
+      "Edit(.claude/hooks/**)",
+      "Write(.claude/hooks/**)",
+      "Edit(.claude/settings.json)",
+      "Write(.claude/settings.json)",
+      "Edit(.claude/agents/**)",
+      "Write(.claude/agents/**)"
     ],
     "ask": [
       "<<FROM_CONFIG:permissions.ask_cmd_patterns AS Bash() RULES>>",
-      "<<FROM_CONFIG:permissions.ask_write_paths AS Edit()+Write() RULES>>"
+      "<<FROM_CONFIG:permissions.ask_write_paths AS Edit()+Write() RULES>>",
+      "Edit(project.config.yml)",
+      "Write(project.config.yml)",
+      "Edit(project.config.schema.json)",
+      "Write(project.config.schema.json)"
     ],
     "allow": [
       "<<FROM_CONFIG:permissions.allow_write_paths AS Edit()+Write() RULES>>",

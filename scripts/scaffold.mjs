@@ -214,8 +214,20 @@ const PERMISSION_EXPANDERS = {
 };
 
 function hydrateSettings(basePath, outPath, config) {
-  const source = existsSync(outPath) ? outPath : basePath;
-  const settings = JSON.parse(readFileSync(source, 'utf8'));
+  // ALWAYS read from basePath (settings.base.json), never from an
+  // existing outPath. Reading from outPath was a real bug: the
+  // <<FROM_CONFIG:...>> sentinels are consumed on the FIRST hydration
+  // (replaced by their expanded literal rules), so a second run had
+  // nothing left to re-expand — a newly-added permissions.ask_write_paths
+  // entry in project.config.yml would never propagate on rerun. Since
+  // .claude/settings.json's deny/ask/allow arrays are fully derived
+  // (settings.base.json's own _comment already says "never hand-edit
+  // these, edit project.config.yml and rerun"), always regenerating them
+  // wholesale from the template is correct, not lossy. Anything a team
+  // needs that isn't expressible via project.config.yml belongs in
+  // .claude/settings.local.json (Claude Code's native local-override
+  // layer) instead — never in this scaffolder-owned file.
+  const settings = JSON.parse(readFileSync(basePath, 'utf8'));
   // Same reasoning as stripLeadingTemplateComment: settings.base.json's
   // "_comment" is documentation for whoever edits the TEMPLATE, not
   // something a team needs staring back at them in their real
@@ -235,15 +247,24 @@ function hydrateSettings(basePath, outPath, config) {
   writeFileSync(outPath, JSON.stringify(settings, null, 2) + '\n');
 }
 
+// Single source of truth for what the vendored tooling needs at runtime
+// (scripts/validate-config.mjs + every hooks/lib/*.mjs helper) — used both
+// to write/patch the target's package.json AND to verify those deps are
+// actually resolvable before trying to run anything that imports them.
+// A stale copy of this list (previously duplicated at the node_modules
+// existence check below) is exactly how minimatch got added as an import
+// without scaffold.mjs learning it needed to be installed — keeping one
+// list closes that class of bug, not just this one instance of it.
+const REQUIRED_TOOLING_DEPS = { 'js-yaml': '^4.1.0', ajv: '^8.20.0', minimatch: '^10.0.0' };
+
 function ensurePackageJson(targetDir) {
   const pkgPath = path.join(targetDir, 'package.json');
-  const requiredDeps = { 'js-yaml': '^4.1.0', ajv: '^8.20.0' };
   if (!existsSync(pkgPath)) {
     const pkg = {
       name: path.basename(targetDir),
       private: true,
       type: 'module',
-      dependencies: requiredDeps,
+      dependencies: REQUIRED_TOOLING_DEPS,
     };
     writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
     return true;
@@ -251,7 +272,7 @@ function ensurePackageJson(targetDir) {
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
   pkg.dependencies = pkg.dependencies || {};
   let changed = false;
-  for (const [dep, version] of Object.entries(requiredDeps)) {
+  for (const [dep, version] of Object.entries(REQUIRED_TOOLING_DEPS)) {
     if (!pkg.dependencies[dep]) {
       pkg.dependencies[dep] = version;
       changed = true;
@@ -281,6 +302,20 @@ function findTeamAuthoredStubs(filePath) {
   return hits;
 }
 
+// The framework repo's own current commit SHA, or "unknown" if that can't
+// be determined (not a git checkout, git missing, etc. — never fatal,
+// this is a diagnostic aid, not something to block scaffolding over).
+function getFrameworkVersion() {
+  const result = spawnSync('git', ['-C', FRAMEWORK_ROOT, 'rev-parse', 'HEAD'], {
+    encoding: 'utf8',
+    shell: process.platform === 'win32',
+  });
+  if (result.status === 0 && typeof result.stdout === 'string' && result.stdout.trim()) {
+    return result.stdout.trim();
+  }
+  return 'unknown';
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const targetDir = path.resolve(args.target);
@@ -304,6 +339,15 @@ function main() {
   mkdirSync(path.join(targetDir, 'scripts'), { recursive: true });
   cpSync(path.join(FRAMEWORK_ROOT, 'scripts', 'validate-config.mjs'), path.join(targetDir, 'scripts', 'validate-config.mjs'));
   cpSync(path.join(FRAMEWORK_ROOT, 'project.config.schema.json'), path.join(targetDir, 'project.config.schema.json'));
+  // Version marker, refreshed on every run: with no version stamp
+  // anywhere, two repos scaffolded from the same framework two days apart
+  // silently diverged (~30-280 lines per vendored file) with no way to
+  // tell without a manual file-by-file diff. A platform team compares
+  // this SHA against the framework repo's own history
+  // (`git -C <framework-checkout> log --oneline <this-sha>..HEAD`) to see
+  // exactly how far behind a given consuming repo is — see
+  // docs/CONFORMANCE.md.
+  writeFileSync(path.join(targetDir, '.claude', '.ai-sdlc-version'), getFrameworkVersion() + '\n');
   mkdirSync(path.join(targetDir, 'docs', 'specs'), { recursive: true });
   mkdirSync(path.join(targetDir, 'docs', 'reviews'), { recursive: true });
   for (const dir of ['docs/specs', 'docs/reviews']) {
@@ -332,8 +376,13 @@ function main() {
   const pkgChanged = ensurePackageJson(targetDir);
   ensureGitignore(targetDir);
   if (pkgChanged && !args.skipInstall) {
-    console.log('scaffold: running npm install for js-yaml/ajv...');
-    const result = spawnSync('npm', ['install'], { cwd: targetDir, stdio: 'inherit' });
+    console.log('scaffold: running npm install for js-yaml/ajv/minimatch...');
+    // shell: true on Windows — without it, spawnSync('npm', ...) fails
+    // with ENOENT there, since npm ships as npm.cmd and Node's spawn
+    // doesn't resolve .cmd shims without a shell. Both real pilot repos
+    // for this framework were scaffolded on Windows, where this was a
+    // hard failure with no workaround short of --skip-install.
+    const result = spawnSync('npm', ['install'], { cwd: targetDir, stdio: 'inherit', shell: process.platform === 'win32' });
     if (result.status !== 0) {
       die('npm install failed — fix that before continuing (or re-run with --skip-install if you will install manually).');
     }
@@ -346,17 +395,21 @@ function main() {
   // (this also satisfies spec section 9's "executes validate-config.mjs
   // to confirm schema integrity" as a hard gate, not an afterthought).
   //
-  // Check the dependency is actually resolvable first: with
-  // --skip-install (or an npm install that failed silently upstream),
-  // validate-config.mjs would otherwise crash on `import yaml from
-  // 'js-yaml'` with a raw ERR_MODULE_NOT_FOUND, and the generic
+  // Check every dependency in REQUIRED_TOOLING_DEPS is actually
+  // resolvable first: with --skip-install (or an npm install that failed
+  // silently upstream), validate-config.mjs would otherwise crash on one
+  // of its `import`s with a raw ERR_MODULE_NOT_FOUND, and the generic
   // non-zero-exit handling below would misreport that as "the config is
   // invalid" — actively wrong, and pointed at the wrong fix.
-  if (!existsSync(path.join(targetDir, 'node_modules', 'js-yaml')) || !existsSync(path.join(targetDir, 'node_modules', 'ajv'))) {
-    die(`js-yaml/ajv are not installed in ${targetDir} — run \`npm install\` there before validate-config.mjs or the hooks can run (this is expected after --skip-install).`);
+  const missingDeps = Object.keys(REQUIRED_TOOLING_DEPS).filter(
+    (dep) => !existsSync(path.join(targetDir, 'node_modules', dep))
+  );
+  if (missingDeps.length > 0) {
+    die(`${missingDeps.join('/')} ${missingDeps.length === 1 ? 'is' : 'are'} not installed in ${targetDir} — run \`npm install\` there before validate-config.mjs or the hooks can run (this is expected after --skip-install).`);
   }
   const validation = spawnSync('node', [path.join(targetDir, 'scripts', 'validate-config.mjs'), '--config', configPath], {
     stdio: 'inherit',
+    shell: process.platform === 'win32',
   });
   if (validation.status !== 0) {
     die('project.config.yml failed validation — fix it and re-run the scaffolder before CLAUDE.md/REVIEW.md/settings.json will be (re)generated.');

@@ -81,11 +81,23 @@ additionally available.
 `tiers.D_triggers`, (c) a `ticket_source.read_tools` entry containing
 `Create`/`Update`/`Delete`, (d) `loop_budget: 0` or `loop_budget: 6`,
 (e) a `pull_request.required_labels` that omits `ai-assisted` (or a
-config missing the `pull_request` section entirely).
+config missing the `pull_request` section entirely), (f)
+`permissions.ask_cmd_patterns` missing any of `git commit`/`git push`/
+`gh pr create`.
 
-**Pass condition:** all five are rejected with an actionable message and
+**Pass condition:** all six are rejected with an actionable message and
 exit code 1. (Cases a–d were confirmed during Phase 1; case e was added
-with the PR-label governance requirement and confirmed the same way.)
+with the PR-label governance requirement; case f was added in the
+2026-08-04 review-findings pass — see Section C.)
+
+**Separately, run with `--strict`** against (g) a config with a
+`CHANGE_ME`-prefixed string anywhere in it, (h) a config whose
+`verify_hook.include_glob` matches zero files in the target repo. Both
+must be rejected under `--strict`; **without** `--strict`, both must only
+warn (exit 0) — this is deliberate, not a gap: `validate-config.mjs` runs
+on every `SessionStart`, and a freshly scaffolded repo legitimately has
+`CHANGE_ME` values and no source tree yet. Use `--strict` in CI, not in
+the vendored `SessionStart` hook.
 
 ### 7. Two-Phase Verification
 
@@ -196,3 +208,87 @@ attempts" — but no such hook was requested or built; only
 
 **Decision:** deliberately not building this. Treat as a permanent scope
 exclusion, not a backlog item, unless a future concrete need reopens it.
+
+### 5. Framework drift across consuming repos — RESOLVED (version stamping)
+
+Two repos scaffolded from the same framework two days apart had already
+diverged 30–280 lines per vendored file, with nothing recording which
+framework revision either was on — the only way to discover this was a
+manual file-by-file diff (which is how it was actually found).
+
+**Decision:** `scripts/scaffold.mjs` writes `.claude/.ai-sdlc-version`
+(this framework repo's `git rev-parse HEAD` at the time of the scaffold
+run, or `"unknown"` if that's not determinable) on every run, first or
+subsequent. This does not attempt a *live* diff against the framework's
+current state — a consuming repo's session has no reliable way to reach
+this framework repo. **Check:** to see how far behind a given consuming
+repo is, from a checkout of this framework repo: `git log --oneline
+$(cat <consuming-repo>/.claude/.ai-sdlc-version)..HEAD`. A repo predating
+this fix has no `.claude/.ai-sdlc-version` file at all — treat that
+absence itself as "unknown drift risk, re-scaffold to find out."
+
+## C. Fixes applied 2026-08-04 (`framework-reviews/FRAMEWORK-REVIEW.md`)
+
+A review cross-checked against two real consuming repos found several
+guarantees this framework documents as mechanically enforced were not, in
+production. Fixed on branch `fix/framework-review-2026-08-04`, in
+severity order:
+
+- **Command injection (critical).** `hooks/verify-loop.sh`'s `{file}`/
+  `{base}` substitution reached `eval` with no shell-quoting — an
+  agent-controlled filename containing `;`, `$(...)`, or backticks
+  executed as shell code. Fixed with a `shell_quote()` helper (mirroring
+  `hooks/lib/config-reader.mjs`'s `shQuote()`) applied only to the
+  `eval`-bound substitution path, not the glob/filesystem-check path
+  (quoting that one would have broken co-located-test detection for every
+  real config, since no real `test_pattern` uses wildcards).
+- **Glob engine replacement (critical).** POSIX `case` patterns don't
+  support brace alternation at all and don't implement minimatch's
+  globstar semantics — verified as a total, silent Phase-1 outage in a
+  real repo whose `include_glob` used `{ts,tsx}`. Replaced with
+  `hooks/lib/glob-match.mjs` (the `minimatch` package, `dot: true` to
+  preserve prior matching behavior for dotfiles), collapsed into one
+  `node` subprocess call per edited file. `scripts/validate-config.mjs`
+  now also smoke-tests `include_glob` against the real repo tree (warn by
+  default, `--strict` to hard-fail — see Section A item 6).
+- **Framework control files unprotected (critical).** Nothing stopped an
+  Implementor from editing `.claude/hooks/**`, `.claude/settings.json`,
+  or `.claude/agents/**` directly, silently disabling every other
+  guarantee. `settings.base.json` now hard-`deny`s all three, and `ask`s
+  (human approval, not hard-deny — teams legitimately edit these during
+  onboarding) `project.config.yml`/`project.config.schema.json`.
+- **`gh pr create` triad + `CHANGE_ME` placeholders (high).** See Section
+  A item 6 cases (f)–(h). Both real repos were missing `gh pr create`
+  from `ask_cmd_patterns` with no validator check to catch it; one
+  shipped unreplaced `CHANGE_ME` values to a committed config.
+- **`settings.json` re-hydration bug (high).** `hydrateSettings()` read
+  from the already-hydrated output file if one existed — but the
+  `<<FROM_CONFIG:...>>` sentinels are consumed on first hydration, so a
+  second scaffold run could never pick up a newly-added
+  `ask_write_paths`/etc. entry. Fixed to always regenerate from
+  `settings.base.json`; anything a team needs outside
+  `project.config.yml`'s schema belongs in `.claude/settings.local.json`
+  instead.
+- **Version stamping (high).** See Section B item 5.
+- **Windows `spawnSync` failures (medium).** Both real pilot repos were
+  scaffolded on Windows; `spawnSync('npm', ...)` without `shell: true`
+  fails there (`npm.cmd` isn't resolved without a shell). Fixed on every
+  `spawnSync` call in `scripts/scaffold.mjs`.
+- **Minimal test suite (partial, ongoing).** `test/` (Node's built-in
+  `node:test`) covers the config validator's rules and the exact
+  brace-glob / zero-depth-`**` cases from the review, so these specific
+  regressions can't reappear silently.
+
+Explicitly **not** addressed in this pass (see the review doc and the
+approved plan for the full reasoning): Phase-2 per-turn budget, binding
+`audit: static` rules to an actual check command, `docs/reviews/` usage,
+mechanical (vs. prompt-only) Tier D/E enforcement, and a full CI/
+CHANGELOG/CONTRIBUTING/LICENSE setup for this repo. The two real
+consuming repos (`registration-backend`, `registration-frontend`) were
+**not** edited directly — not reachable from the environment this fix was
+authored in; each needs `git commit`/`gh pr create` added to
+`ask_cmd_patterns` (verify with `--strict` after re-scaffolding), and
+`registration-frontend` additionally needs its `CHANGE_ME` values
+replaced. Re-scaffolding either (`node scripts/scaffold.mjs --target
+<path>`, no `--template` needed) picks up every fix above and gets a
+version stamp for the first time.

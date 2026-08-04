@@ -9,13 +9,14 @@
 // violation) exits non-zero with actionable messages. This script never
 // exits 0 on a config it could not fully parse and check.
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import yaml from 'js-yaml';
 // The schema declares itself as draft 2020-12; the base ajv export only
 // understands draft-07, so it must be the dedicated 2020-12 build.
 import Ajv2020 from 'ajv/dist/2020.js';
+import { minimatch } from 'minimatch';
 
 // Resolve the schema next to THIS file, not relative to the caller's cwd,
 // so the script keeps working whether it runs inside this framework repo
@@ -31,11 +32,13 @@ const WRITE_VERBS = [
 ];
 
 function parseArgs(argv) {
-  const args = { config: 'project.config.yml' };
+  const args = { config: 'project.config.yml', strict: false };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--config' || argv[i] === '-c') {
       args.config = argv[i + 1];
       i++;
+    } else if (argv[i] === '--strict') {
+      args.strict = true;
     }
   }
   return args;
@@ -46,6 +49,22 @@ function fail(messages) {
   for (const m of messages) console.error(`  - ${m}`);
   console.error('\nFix the issues above and re-run: node scripts/validate-config.mjs --config <path-to-project.config.yml>\n');
   process.exit(1);
+}
+
+// Yields [dottedPath, value] for every STRING leaf anywhere in `obj`
+// (arrays included, indexed numerically in the path) — used to scan the
+// whole config for stray CHANGE_ME placeholders without hardcoding which
+// fields might carry one.
+function* walkStrings(obj, prefix = '') {
+  if (typeof obj === 'string') {
+    yield [prefix, obj];
+    return;
+  }
+  if (obj === null || typeof obj !== 'object') return;
+  const entries = Array.isArray(obj) ? obj.map((v, i) => [i, v]) : Object.entries(obj);
+  for (const [key, value] of entries) {
+    yield* walkStrings(value, prefix ? `${prefix}.${key}` : String(key));
+  }
 }
 
 // Checks the JSON Schema cannot express cleanly: cross-field/cross-item
@@ -59,6 +78,15 @@ function fail(messages) {
 // array member).
 const REQUIRED_PR_LABEL = 'ai-assisted';
 
+// The full triad docs/CONFORMANCE.md calls load-bearing for "no unreviewed
+// commit reaches the remote" under this framework's standard shared-session
+// deployment (see agents/coordinator.md's Invocation section): each of
+// these must require human approval before it runs, or that guarantee has
+// a hole. Found missing from two real consuming repos' configs (only
+// `gh pr create` in one case) with no validator check to catch it — this
+// closes that gap so it can't regress silently again.
+const REQUIRED_ASK_CMD_PATTERNS = ['git commit', 'git push', 'gh pr create'];
+
 function semanticChecks(config) {
   const errors = [];
 
@@ -69,6 +97,20 @@ function semanticChecks(config) {
     if (!config.pull_request.required_labels.includes(REQUIRED_PR_LABEL)) {
       errors.push(
         `pull_request.required_labels must include "${REQUIRED_PR_LABEL}" — every PR the Coordinator opens must carry the org-wide AI-assisted marker. Add it (you may keep your other labels too).`
+      );
+    }
+  }
+
+  // Every repo must gate the full commit/push/PR triad behind human
+  // approval — this is the actual mechanism closing the "no unreviewed
+  // state change reaches the remote" guarantee under this framework's
+  // shared-session deployment model, not any hook (see
+  // agents/coordinator.md).
+  if (config?.permissions && Array.isArray(config.permissions.ask_cmd_patterns)) {
+    const missing = REQUIRED_ASK_CMD_PATTERNS.filter((p) => !config.permissions.ask_cmd_patterns.includes(p));
+    if (missing.length > 0) {
+      errors.push(
+        `permissions.ask_cmd_patterns is missing ${missing.map((p) => `"${p}"`).join(', ')} — every one of ${REQUIRED_ASK_CMD_PATTERNS.map((p) => `"${p}"`).join(', ')} must require human approval, or a state change can reach the remote without review.`
       );
     }
   }
@@ -146,8 +188,95 @@ function semanticChecks(config) {
   return errors;
 }
 
+// Skipped entirely, not just excluded from the match: no config, however
+// unusual, has a legitimate reason to want these walked, and node_modules
+// on a real repo can be enormous.
+const SMOKE_TEST_SKIP_DIR_NAMES = new Set(['.git', 'node_modules', 'dist', 'build']);
+const SMOKE_TEST_MAX_FILES = 20000;
+const MINIMATCH_OPTS = { dot: true }; // must match hooks/lib/glob-match.mjs's options exactly, or this test's prediction and the hook's real behavior can disagree.
+
+function walkFiles(dir, relBase, results) {
+  if (results.length >= SMOKE_TEST_MAX_FILES) return;
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return; // unreadable dir — not this check's job to report that
+  }
+  for (const entry of entries) {
+    if (results.length >= SMOKE_TEST_MAX_FILES) return;
+    if (entry.isDirectory() && SMOKE_TEST_SKIP_DIR_NAMES.has(entry.name)) continue;
+    const full = path.join(dir, entry.name);
+    const rel = relBase ? `${relBase}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) {
+      walkFiles(full, rel, results);
+    } else if (entry.isFile()) {
+      results.push(rel);
+    }
+  }
+}
+
+// Does verify_hook.include_glob (minus skip_globs) match ANY real file in
+// this repo? A glob that matches nothing means Phase 1 lint/test silently
+// never runs — exactly the bug that motivated this check (see
+// AI-SDLC-FRAMEWORK-SPEC.md's CONFORMANCE notes on a brace-alternation
+// glob that never matched anything under the framework's prior POSIX
+// `case`-based matcher). Returns a WARNING by default (validate-config.mjs
+// runs on SessionStart — hard-failing a freshly scaffolded, still-empty
+// repo would block starting a session at all) and only escalates to a
+// hard error under --strict, intended for a CI-specific
+// invocation where a populated-but-wrong-glob repo is a much stronger
+// signal than "this repo has no files yet."
+function checkIncludeGlobSmokeTest(config, repoRoot, strict) {
+  const includeGlob = config?.verify_hook?.include_glob;
+  if (typeof includeGlob !== 'string') return { warning: null, error: null };
+  const skipGlobs = Array.isArray(config?.verify_hook?.skip_globs) ? config.verify_hook.skip_globs : [];
+
+  const files = [];
+  walkFiles(repoRoot, '', files);
+
+  if (files.length === 0) {
+    // Fresh/empty repo — nothing to warn about yet, and warning here would
+    // be a false positive on every brand-new scaffold.
+    return { warning: null, error: null };
+  }
+
+  const matchesHookLogic = (file) =>
+    minimatch(file, includeGlob, MINIMATCH_OPTS) && !skipGlobs.some((s) => minimatch(file, s, MINIMATCH_OPTS));
+
+  if (files.some(matchesHookLogic)) return { warning: null, error: null };
+
+  const message = `verify_hook.include_glob ("${includeGlob}") matches ZERO of the ${files.length} files scanned under ${repoRoot} (after skip_globs) — Phase 1 lint/test would never run for this repo as configured. Check the glob against the actual source tree.`;
+  return strict ? { warning: null, error: message } : { warning: message, error: null };
+}
+
+// Starter templates (templates/stacks/*.config.yml) ship CHANGE_ME
+// placeholders a team is expected to replace before their first task —
+// and scaffold.mjs validates the config immediately after writing a
+// FRESH starter, before anyone has had a chance to edit it. A hard fail
+// here would break that documented first-run flow. So: WARNING by default
+// (visible on every scaffold run and SessionStart until fixed — not
+// silent), escalating to a hard error only under --strict, for a
+// CI-specific invocation where "this got committed with placeholders
+// still in it" is the real signal, not "this was scaffolded five seconds
+// ago." Found live, unreplaced, and passing validation in a real
+// consuming repo's committed config (team.name, tiers.C_needs_reviewer) —
+// walks the WHOLE config, not just those two fields, since any string
+// field could carry one.
+function checkChangeMePlaceholders(config, strict) {
+  const hits = [...walkStrings(config)].filter(([, value]) => /^CHANGE_ME/.test(value));
+  if (hits.length === 0) return { warning: null, error: null };
+
+  const message = hits
+    .map(([dottedPath, value]) => `${dottedPath} is still a placeholder value ("${value}")`)
+    .join('; ');
+  return strict
+    ? { warning: null, error: `${message} — replace before this can pass under --strict.` }
+    : { warning: `${message} — replace with this team's real value(s) before scaffolding further.`, error: null };
+}
+
 function main() {
-  const { config: configPath } = parseArgs(process.argv.slice(2));
+  const { config: configPath, strict } = parseArgs(process.argv.slice(2));
   const resolvedConfigPath = path.resolve(process.cwd(), configPath);
 
   if (!existsSync(resolvedConfigPath)) {
@@ -205,6 +334,14 @@ function main() {
   }
 
   errors.push(...semanticChecks(config));
+
+  // Repo root is wherever project.config.yml itself lives — that's the
+  // convention every other path in this framework assumes too.
+  const repoRoot = path.dirname(resolvedConfigPath);
+  for (const check of [checkIncludeGlobSmokeTest(config, repoRoot, strict), checkChangeMePlaceholders(config, strict)]) {
+    if (check.error) errors.push(check.error);
+    if (check.warning) console.warn(`\n⚠ ${check.warning}\n`);
+  }
 
   if (errors.length > 0) {
     fail(errors);
