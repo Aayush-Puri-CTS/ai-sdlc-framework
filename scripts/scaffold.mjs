@@ -4,7 +4,7 @@
 // (AI-SDLC-FRAMEWORK-SPEC.md section 9, "Automation Scaffolder").
 //
 // Usage:
-//   node scripts/scaffold.mjs --target <path> [--template <stack>] [--skip-install]
+//   node scripts/scaffold.mjs --target <path> [--template <stack>] [--skip-install] [--adopt-existing] [--with-ci]
 //
 // --template selects a starter project.config.yml from templates/stacks/
 // (gradle-kotlin | xcode-swift | node-pnpm) and is only used the FIRST
@@ -14,8 +14,22 @@
 // editing project.config.yml is the supported way to refresh generated
 // content — see the FROM_CONFIG marker convention in
 // templates/CLAUDE.template.md and templates/REVIEW.template.md.
+//
+// Safe to run against a repo that already has its own, unrelated Claude
+// Code setup: pre-existing invariant-core files (agents/hooks/etc.) are
+// moved aside rather than overwritten if they differ; a pre-existing
+// .claude/settings.json is merged, not replaced (foreign permission rules
+// land in .claude/settings.local.json, foreign hooks are left alone); a
+// pre-existing CLAUDE.md/REVIEW.md with no framework markers is refused
+// by default (--adopt-existing appends instead of refusing). See
+// docs/CONFORMANCE.md for the full behavior and its documented limits.
+//
+// --with-ci additionally vendors a GitHub Actions workflow
+// (.github/workflows/ai-sdlc-validate.yml) and a named PR template
+// (.github/PULL_REQUEST_TEMPLATE/ai-sdlc.md) — off by default, since CI
+// wiring is a more consequential change than the rest of scaffolding.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, chmodSync, cpSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, chmodSync, cpSync, renameSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -29,22 +43,70 @@ function die(msg) {
 }
 
 function parseArgs(argv) {
-  const args = { target: null, template: null, skipInstall: false };
+  const args = { target: null, template: null, skipInstall: false, adoptExisting: false, withCi: false };
   for (let i = 0; i < argv.length; i++) {
     switch (argv[i]) {
       case '--target': args.target = argv[++i]; break;
       case '--template': args.template = argv[++i]; break;
       case '--skip-install': args.skipInstall = true; break;
-      default: die(`unrecognized argument "${argv[i]}". Usage: scaffold.mjs --target <path> [--template <stack>] [--skip-install]`);
+      case '--adopt-existing': args.adoptExisting = true; break;
+      case '--with-ci': args.withCi = true; break;
+      default: die(`unrecognized argument "${argv[i]}". Usage: scaffold.mjs --target <path> [--template <stack>] [--skip-install] [--adopt-existing] [--with-ci]`);
     }
   }
   if (!args.target) die('missing required --target <path-to-consuming-repo>.');
   return args;
 }
 
-function copyTree(src, dest) {
-  mkdirSync(dest, { recursive: true });
-  cpSync(src, dest, { recursive: true });
+function filesAreIdentical(a, b) {
+  try {
+    return readFileSync(a).equals(readFileSync(b));
+  } catch {
+    return false;
+  }
+}
+
+// <name>.<ext> -> <name>.pre-ai-sdlc-framework.<ext> (or just appends the
+// suffix if there's no extension to preserve).
+function renameAsidePath(destFile) {
+  const ext = path.extname(destFile);
+  const base = ext ? destFile.slice(0, -ext.length) : destFile;
+  return `${base}.pre-ai-sdlc-framework${ext}`;
+}
+
+// Vendors one file. Only when `isFirstAdoption` is true does this check
+// for a conflict at all: if something already exists at destFile AND
+// differs from what we're about to write, it's moved aside (never
+// deleted) before we overwrite — this is the one moment a repo might have
+// unrelated content sitting at a path this framework now owns. On every
+// later run (isFirstAdoption false), this overwrites unconditionally,
+// exactly like before this check existed — vendored files aren't meant to
+// be permanently hand-edited, and protecting a team's post-adoption edits
+// to them was never the guarantee here, only protecting whatever existed
+// the moment BEFORE adoption.
+function vendorFile(srcFile, destFile, { isFirstAdoption, notices, targetDir }) {
+  mkdirSync(path.dirname(destFile), { recursive: true });
+  if (isFirstAdoption && existsSync(destFile) && !filesAreIdentical(srcFile, destFile)) {
+    const asideName = renameAsidePath(destFile);
+    renameSync(destFile, asideName);
+    notices.push(
+      `moved aside pre-existing ${path.relative(targetDir, destFile)} -> ${path.basename(asideName)} (this framework now owns this path; your original content is preserved under that name)`
+    );
+  }
+  cpSync(srcFile, destFile);
+}
+
+function vendorTree(srcDir, destDir, opts) {
+  mkdirSync(destDir, { recursive: true });
+  for (const entry of readdirSync(srcDir, { withFileTypes: true })) {
+    const s = path.join(srcDir, entry.name);
+    const d = path.join(destDir, entry.name);
+    if (entry.isDirectory()) {
+      vendorTree(s, d, opts);
+    } else {
+      vendorFile(s, d, opts);
+    }
+  }
 }
 
 // Every .sh file needs +x regardless of the source repo's own file mode
@@ -189,9 +251,43 @@ function stripLeadingTemplateComment(text, templatePath) {
   return stripped;
 }
 
-function hydrateMarkdown(templatePath, outPath, values) {
+function hasAnyFromConfigMarker(text) {
+  return /<!--\s*FROM_CONFIG:[\w.]+:BEGIN\s*-->/.test(text);
+}
+
+// Standing invariant, checked EVERY run, not just on first adoption: if
+// outPath already exists, it must carry at least one FROM_CONFIG marker,
+// or patchFromConfigSpans would silently match nothing and write back the
+// unchanged file while the caller reports success — exactly the bug this
+// exists to prevent. This can happen post-adoption too (a bad merge
+// conflict, a teammate hand-editing CLAUDE.md, a future template rename
+// stripping a marker pair), so it is not gated by an isFirstAdoption flag.
+function hydrateMarkdown(templatePath, outPath, values, adoptExisting, notices) {
   const templateText = readFileSync(templatePath, 'utf8');
   assertNoUnknownMarkers(templateText, values, templatePath);
+  const fileName = path.basename(outPath);
+
+  if (existsSync(outPath)) {
+    const existingText = readFileSync(outPath, 'utf8');
+    if (!hasAnyFromConfigMarker(existingText)) {
+      if (!adoptExisting) {
+        die(
+          `${fileName} already exists with no FROM_CONFIG markers — it doesn't look like framework-generated output (or its markers were stripped). Refusing to modify it silently.\n` +
+            `  Recommended: rename it aside (e.g. \`mv ${fileName} ${fileName.replace(/\.md$/, '')}.pre-ai-sdlc-framework.md\`) and re-run — you'll get one coherent, canonical file to repopulate by hand from the renamed copy.\n` +
+            `  Faster but messier: re-run with --adopt-existing to append the framework's required sections below your existing content in the SAME file — you will need to reconcile duplicate/contradictory sections yourself.`
+        );
+      }
+      const delimiter =
+        '\n\n<!-- ai-sdlc-framework: content below this line is scaffolder-managed (see project.config.yml) — do not hand-edit past this line; review above it for now-duplicate sections. -->\n\n';
+      const appended = existingText.replace(/\n+$/, '') + delimiter + stripLeadingTemplateComment(templateText, templatePath);
+      const hydrated = patchFromConfigSpans(appended, values);
+      mkdirSync(path.dirname(outPath), { recursive: true });
+      writeFileSync(outPath, hydrated);
+      notices.push(`${fileName}: framework content appended below your existing content (--adopt-existing) — review for duplicate/contradictory sections before your first task.`);
+      return;
+    }
+  }
+
   const base = existsSync(outPath) ? readFileSync(outPath, 'utf8') : stripLeadingTemplateComment(templateText, templatePath);
   const hydrated = patchFromConfigSpans(base, values);
   mkdirSync(path.dirname(outPath), { recursive: true });
@@ -213,38 +309,159 @@ const PERMISSION_EXPANDERS = {
     config.permissions.allow_write_paths.flatMap((p) => [`Edit(${p})`, `Write(${p})`]),
 };
 
-function hydrateSettings(basePath, outPath, config) {
-  // ALWAYS read from basePath (settings.base.json), never from an
-  // existing outPath. Reading from outPath was a real bug: the
-  // <<FROM_CONFIG:...>> sentinels are consumed on the FIRST hydration
-  // (replaced by their expanded literal rules), so a second run had
-  // nothing left to re-expand — a newly-added permissions.ask_write_paths
-  // entry in project.config.yml would never propagate on rerun. Since
-  // .claude/settings.json's deny/ask/allow arrays are fully derived
-  // (settings.base.json's own _comment already says "never hand-edit
-  // these, edit project.config.yml and rerun"), always regenerating them
-  // wholesale from the template is correct, not lossy. Anything a team
-  // needs that isn't expressible via project.config.yml belongs in
-  // .claude/settings.local.json (Claude Code's native local-override
-  // layer) instead — never in this scaffolder-owned file.
-  const settings = JSON.parse(readFileSync(basePath, 'utf8'));
-  // Same reasoning as stripLeadingTemplateComment: settings.base.json's
-  // "_comment" is documentation for whoever edits the TEMPLATE, not
-  // something a team needs staring back at them in their real
-  // .claude/settings.json forever. JSON has no real comment syntax, so
-  // this was the least-bad way to document the template itself — but it
-  // shouldn't survive into the hydrated output.
-  delete settings._comment;
+// Persisted at the top level of every settings.json this scaffolder
+// writes — the one reliable, content-based signal for "did THIS framework
+// generate this file already" that doesn't depend on any external state
+// (unlike .claude/.ai-sdlc-version, which lives one directory up and could
+// in principle go missing independently of this file).
+const FRAMEWORK_SIGNATURE_KEY = '$ai_sdlc_framework_managed';
+
+function expandPermissionsFromTemplate(templateSettings, config) {
+  const result = {};
   for (const key of ['deny', 'ask', 'allow']) {
-    const list = settings.permissions?.[key];
-    if (!Array.isArray(list)) continue;
-    settings.permissions[key] = list.flatMap((entry) => {
-      const expand = PERMISSION_EXPANDERS[entry];
-      return expand ? expand(config) : [entry];
-    });
+    const list = templateSettings.permissions?.[key];
+    result[key] = Array.isArray(list)
+      ? list.flatMap((entry) => {
+          const expand = PERMISSION_EXPANDERS[entry];
+          return expand ? expand(config) : [entry];
+        })
+      : [];
   }
+  return result;
+}
+
+// Extracts the basename of whatever script a hook `command` string
+// targets (e.g. '"$CLAUDE_PROJECT_DIR/.claude/hooks/verify-loop.sh"' ->
+// "verify-loop.sh"), so hook-group identity can be matched on "which
+// script does this run" rather than the exact command string — a future
+// flag/arg change to the same script must not look like "not present"
+// and produce a duplicate, stale-alongside-new hook group.
+function scriptBasenameFromCommand(command) {
+  if (typeof command !== 'string') return null;
+  const match = command.match(/([^\s"']+\.(?:sh|mjs|js))/);
+  return match ? path.basename(match[1]) : null;
+}
+
+// Merges our own hook groups (from the template) into whatever hook
+// groups already exist for each event, every run (not just on first
+// adoption): any existing group that targets one of OUR script basenames
+// is dropped (it's a stale copy of something we own — this is how a
+// future command/flag change actually propagates on re-scaffold, exactly
+// like today's unconditional-overwrite behavior for a repo with no
+// foreign content), then our current template groups for that event are
+// appended. Any group that does NOT target one of our basenames (a
+// team's own, unrelated hook) is left completely untouched. Consequence,
+// stated plainly rather than left to be discovered: if a team manually
+// deletes one of our shipped hook groups, it comes back on the next
+// scaffold run — the same accepted trade-off this framework already
+// applies to permissions.* (see docs/CONFORMANCE.md).
+function mergeHooksTree(existingHooks, templateHooks) {
+  const result = {};
+  const allEvents = new Set([...Object.keys(existingHooks || {}), ...Object.keys(templateHooks || {})]);
+  for (const event of allEvents) {
+    const existingGroups = Array.isArray(existingHooks?.[event]) ? existingHooks[event] : [];
+    const ourGroups = Array.isArray(templateHooks?.[event]) ? templateHooks[event] : [];
+    const ourBasenames = new Set(
+      ourGroups.flatMap((g) => (g.hooks || []).map((h) => scriptBasenameFromCommand(h.command)).filter(Boolean))
+    );
+    const foreignGroups = existingGroups.filter(
+      (g) => !(g.hooks || []).some((h) => ourBasenames.has(scriptBasenameFromCommand(h.command)))
+    );
+    result[event] = [...foreignGroups, ...ourGroups];
+  }
+  return result;
+}
+
+// Anything in `entriesByKey` (permissions.deny/ask/allow entries a
+// foreign settings.json had that we would NOT generate ourselves) is
+// migrated into .claude/settings.local.json rather than settings.json —
+// the one file this scaffolder never regenerates, so content routed here
+// survives every future run unconditionally. This is the fix for a real
+// bug an earlier draft of this design had: merging foreign entries
+// directly into settings.json would have survived exactly one run, since
+// the very next hydration fully regenerates permissions.* from
+// settings.base.json + config (needed so a REMOVED config entry actually
+// disappears) with no awareness of what was merged in before.
+function migrateForeignPermissionsToLocalSettings(settingsLocalPath, entriesByKey, notices) {
+  const hasAnything = Object.values(entriesByKey).some((arr) => arr.length > 0);
+  if (!hasAnything) return;
+  const existing = existsSync(settingsLocalPath) ? JSON.parse(readFileSync(settingsLocalPath, 'utf8')) : {};
+  existing.permissions = existing.permissions || {};
+  for (const [key, entries] of Object.entries(entriesByKey)) {
+    if (entries.length === 0) continue;
+    const current = Array.isArray(existing.permissions[key]) ? existing.permissions[key] : [];
+    existing.permissions[key] = [...new Set([...current, ...entries])];
+  }
+  mkdirSync(path.dirname(settingsLocalPath), { recursive: true });
+  writeFileSync(settingsLocalPath, JSON.stringify(existing, null, 2) + '\n');
+  notices.push(
+    `migrated pre-existing permission rule(s) that project.config.yml doesn't express into .claude/settings.local.json (never touched by this scaffolder again) — review it once.`
+  );
+}
+
+// permissions.deny/ask/allow are always fully regenerated from
+// settings.base.json + config, every run, foreign settings.json or not —
+// reading from outPath was a real bug fixed previously (the
+// <<FROM_CONFIG:...>> sentinels are consumed on first hydration, so a
+// later run had nothing left to re-expand). What's NEW here is handling a
+// pre-existing settings.json that ISN'T ours: detected via the absence of
+// FRAMEWORK_SIGNATURE_KEY (a signal that doesn't depend on any state
+// outside this one file), in which case foreign permission entries are
+// migrated to settings.local.json (see above) rather than silently
+// destroyed, unknown top-level keys are carried forward, and an explicit
+// pre-existing `agent` choice is respected rather than overridden.
+function hydrateSettings(basePath, outPath, config, notices) {
+  const template = JSON.parse(readFileSync(basePath, 'utf8'));
+  delete template._comment;
+  const ourPermissions = expandPermissionsFromTemplate(template, config);
+
+  let existing = null;
+  if (existsSync(outPath)) {
+    try {
+      existing = JSON.parse(readFileSync(outPath, 'utf8'));
+    } catch (err) {
+      die(`.claude/settings.json exists but is not valid JSON (${err.message}) — fix or remove it by hand before scaffolding.`);
+    }
+  }
+  const isForeign = existing !== null && !existing[FRAMEWORK_SIGNATURE_KEY];
+
+  const result = { ...template };
+  delete result._comment;
+
+  if (isForeign) {
+    const foreignToMigrate = {};
+    for (const key of ['deny', 'ask', 'allow']) {
+      const existingList = Array.isArray(existing.permissions?.[key]) ? existing.permissions[key] : [];
+      foreignToMigrate[key] = existingList.filter((entry) => !ourPermissions[key].includes(entry));
+    }
+    migrateForeignPermissionsToLocalSettings(path.join(path.dirname(outPath), 'settings.local.json'), foreignToMigrate, notices);
+  }
+
+  if (existing) {
+    // Safety net for anything a team added that we don't manage
+    // ourselves — foreign (pre-adoption) or their own later edit
+    // (post-adoption) outside what this scaffolder understands.
+    const OUR_KEYS = new Set(['$schema', 'permissions', 'hooks', 'agent', FRAMEWORK_SIGNATURE_KEY]);
+    for (const [key, value] of Object.entries(existing)) {
+      if (!OUR_KEYS.has(key)) result[key] = value;
+    }
+    if (existing.agent && existing.agent !== result.agent) {
+      notices.push(
+        `.claude/settings.json already set "agent": "${existing.agent}" — keeping it (this framework's default is "${result.agent}"; the Coordinator-first workflow described in agents/coordinator.md may not engage automatically unless you change this yourself).`
+      );
+      result.agent = existing.agent;
+    }
+  }
+
+  result.permissions = result.permissions || {};
+  result.permissions.deny = ourPermissions.deny;
+  result.permissions.ask = ourPermissions.ask;
+  result.permissions.allow = ourPermissions.allow;
+  result.hooks = mergeHooksTree(existing?.hooks, template.hooks);
+  result[FRAMEWORK_SIGNATURE_KEY] = true;
+
   mkdirSync(path.dirname(outPath), { recursive: true });
-  writeFileSync(outPath, JSON.stringify(settings, null, 2) + '\n');
+  writeFileSync(outPath, JSON.stringify(result, null, 2) + '\n');
 }
 
 // Single source of truth for what the vendored tooling needs at runtime
@@ -321,24 +538,56 @@ function main() {
   const targetDir = path.resolve(args.target);
   mkdirSync(targetDir, { recursive: true });
 
+  // Computed BEFORE any writes, from the pre-scaffold state only. Both
+  // signals absent means this repo has never been configured for this
+  // framework before — the one moment pre-existing, unrelated content
+  // might be sitting at a path we're about to vendor into. project.config.yml
+  // corroborates .claude/.ai-sdlc-version (rather than relying on it alone)
+  // because a repo that predates version-stamping — including both of
+  // this framework's own real pilot repos — would otherwise be
+  // misclassified as "foreign" and have its own real files renamed aside.
+  const isFirstAdoption =
+    !existsSync(path.join(targetDir, '.claude', '.ai-sdlc-version')) && !existsSync(path.join(targetDir, 'project.config.yml'));
+  const notices = [];
+  const vendorOpts = { isFirstAdoption, notices, targetDir };
+
   console.log(`scaffold: vendoring framework core into ${targetDir}`);
 
-  // 1. Vendor the invariant core — always safe to overwrite; none of it
-  // is team-authored content.
-  copyTree(path.join(FRAMEWORK_ROOT, 'agents'), path.join(targetDir, '.claude', 'agents'));
-  copyTree(path.join(FRAMEWORK_ROOT, 'hooks'), path.join(targetDir, '.claude', 'hooks'));
+  // 1. Vendor the invariant core — safe to overwrite once ownership is
+  // established; vendorFile/vendorTree only pause to check for a conflict
+  // on first adoption (see the isFirstAdoption comment above).
+  vendorTree(path.join(FRAMEWORK_ROOT, 'agents'), path.join(targetDir, '.claude', 'agents'), vendorOpts);
+  vendorTree(path.join(FRAMEWORK_ROOT, 'hooks'), path.join(targetDir, '.claude', 'hooks'), vendorOpts);
   chmodExecutablesRecursive(path.join(targetDir, '.claude', 'hooks'));
-  copyTree(path.join(FRAMEWORK_ROOT, 'lib', 'ticket-source'), path.join(targetDir, '.claude', 'ticket-source'));
-  mkdirSync(path.join(targetDir, '.claude', 'templates'), { recursive: true });
-  cpSync(
+  vendorTree(path.join(FRAMEWORK_ROOT, 'lib', 'ticket-source'), path.join(targetDir, '.claude', 'ticket-source'), vendorOpts);
+  vendorFile(
     path.join(FRAMEWORK_ROOT, 'templates', 'SPEC.template.md'),
-    path.join(targetDir, '.claude', 'templates', 'SPEC.template.md')
+    path.join(targetDir, '.claude', 'templates', 'SPEC.template.md'),
+    vendorOpts
   );
-  mkdirSync(path.join(targetDir, 'ADR'), { recursive: true });
-  cpSync(path.join(FRAMEWORK_ROOT, 'ADR', '0000-template.md'), path.join(targetDir, 'ADR', '0000-template.md'));
-  mkdirSync(path.join(targetDir, 'scripts'), { recursive: true });
-  cpSync(path.join(FRAMEWORK_ROOT, 'scripts', 'validate-config.mjs'), path.join(targetDir, 'scripts', 'validate-config.mjs'));
-  cpSync(path.join(FRAMEWORK_ROOT, 'project.config.schema.json'), path.join(targetDir, 'project.config.schema.json'));
+  vendorFile(path.join(FRAMEWORK_ROOT, 'ADR', '0000-template.md'), path.join(targetDir, 'ADR', '0000-template.md'), vendorOpts);
+  vendorFile(
+    path.join(FRAMEWORK_ROOT, 'scripts', 'validate-config.mjs'),
+    path.join(targetDir, 'scripts', 'validate-config.mjs'),
+    vendorOpts
+  );
+  vendorFile(
+    path.join(FRAMEWORK_ROOT, 'project.config.schema.json'),
+    path.join(targetDir, 'project.config.schema.json'),
+    vendorOpts
+  );
+  if (args.withCi) {
+    vendorFile(
+      path.join(FRAMEWORK_ROOT, 'templates', 'github', 'ai-sdlc-validate.yml'),
+      path.join(targetDir, '.github', 'workflows', 'ai-sdlc-validate.yml'),
+      vendorOpts
+    );
+    vendorFile(
+      path.join(FRAMEWORK_ROOT, 'templates', 'github', 'PULL_REQUEST_TEMPLATE.ai-sdlc.md'),
+      path.join(targetDir, '.github', 'PULL_REQUEST_TEMPLATE', 'ai-sdlc.md'),
+      vendorOpts
+    );
+  }
   // Version marker, refreshed on every run: with no version stamp
   // anywhere, two repos scaffolded from the same framework two days apart
   // silently diverged (~30-280 lines per vendored file) with no way to
@@ -346,7 +595,9 @@ function main() {
   // this SHA against the framework repo's own history
   // (`git -C <framework-checkout> log --oneline <this-sha>..HEAD`) to see
   // exactly how far behind a given consuming repo is — see
-  // docs/CONFORMANCE.md.
+  // docs/CONFORMANCE.md. Not a "vendored" file subject to the
+  // diff/rename-aside check above — it's our own bookkeeping, always
+  // safe to overwrite outright.
   writeFileSync(path.join(targetDir, '.claude', '.ai-sdlc-version'), getFrameworkVersion() + '\n');
   mkdirSync(path.join(targetDir, 'docs', 'specs'), { recursive: true });
   mkdirSync(path.join(targetDir, 'docs', 'reviews'), { recursive: true });
@@ -418,12 +669,13 @@ function main() {
   // 5. Hydrate CLAUDE.md, REVIEW.md, settings.json from the now-valid config.
   const config = yaml.load(readFileSync(configPath, 'utf8'));
   const values = buildFromConfigValues(config);
-  hydrateMarkdown(path.join(FRAMEWORK_ROOT, 'templates', 'CLAUDE.template.md'), path.join(targetDir, 'CLAUDE.md'), values);
-  hydrateMarkdown(path.join(FRAMEWORK_ROOT, 'templates', 'REVIEW.template.md'), path.join(targetDir, 'REVIEW.md'), values);
+  hydrateMarkdown(path.join(FRAMEWORK_ROOT, 'templates', 'CLAUDE.template.md'), path.join(targetDir, 'CLAUDE.md'), values, args.adoptExisting, notices);
+  hydrateMarkdown(path.join(FRAMEWORK_ROOT, 'templates', 'REVIEW.template.md'), path.join(targetDir, 'REVIEW.md'), values, args.adoptExisting, notices);
   hydrateSettings(
     path.join(FRAMEWORK_ROOT, 'settings.base.json'),
     path.join(targetDir, '.claude', 'settings.json'),
-    config
+    config,
+    notices
   );
 
   console.log('scaffold: CLAUDE.md, REVIEW.md, and .claude/settings.json are hydrated.');
@@ -437,6 +689,14 @@ function main() {
   if (stubs.length > 0) {
     console.log('\nscaffold: TEAM_AUTHORED sections still need to be filled in by hand:');
     console.log(stubs.join('\n'));
+  }
+
+  // 7. Anything moved aside, migrated, or appended rather than cleanly
+  // written needs a human to actually look at it — surfaced distinctly
+  // from the routine success line above, not buried inside it.
+  if (notices.length > 0) {
+    console.log('\nscaffold: heads up — this run adopted pre-existing content rather than starting clean:');
+    console.log(notices.map((n) => `  - ${n}`).join('\n'));
   }
 
   console.log('\nscaffold: done.');
