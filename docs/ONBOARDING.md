@@ -60,31 +60,77 @@ typical, scaffold each independently. If they're one monorepo, pick
 whichever template matches more of the repo and hand-adjust the other
 half's globs afterward.)
 
-This:
+What happens next depends on one thing: **does this repo already have a
+`CLAUDE.md`?**
+
+```mermaid
+flowchart TD
+    Start(["node scripts/scaffold.mjs --target &lt;repo&gt;"]) --> Check{"Does the repo\nalready have a CLAUDE.md?"}
+    Check -->|"No"| CaseA["Case A\nClean scaffold"]
+    Check -->|"Yes"| Markers{"Does it already have\nFROM_CONFIG markers?\n(i.e. this framework\nwrote it before)"}
+    Markers -->|"Yes"| CaseA
+    Markers -->|"No — unrelated content"| Refuse["Default: scaffold REFUSES,\nfile left byte-for-byte untouched"]
+    Refuse --> Choice{"You choose"}
+    Choice -->|"Rename aside + re-run\n(recommended)"| CaseA
+    Choice -->|"--adopt-existing"| CaseB["Case B\nFramework content appended\nbelow your existing content"]
+    CaseA --> Stubs["Fill in the &lt;&lt;TEAM_AUTHORED:...&gt;&gt; stubs\n(Step 3)"]
+    CaseB --> Reconcile["Fill in the stubs, AND\nreconcile any duplicate/\ncontradictory sections"]
+```
+
+### Case A — the repo has no `CLAUDE.md` yet (the common case)
+
+This is the path above whenever a `CLAUDE.md` didn't already exist, or the
+one that did was already this framework's own output. The scaffolder:
+
 1. Vendors `agents/`, `hooks/`, `lib/ticket-source/`, and the spec/ADR
    templates into `.claude/` and `ADR/` in your repo.
 2. Writes a starter `project.config.yml` (only if one doesn't already
    exist — it will never overwrite yours on a second run).
 3. Installs `js-yaml`/`ajv`/`minimatch` (`npm install`) so the tooling
    actually runs.
-4. Validates the config and hydrates `CLAUDE.md`, `REVIEW.md`, and
-   `.claude/settings.json` from it.
+4. Validates the config and generates `CLAUDE.md`, `REVIEW.md`, and
+   `.claude/settings.json` from it, with `FROM_CONFIG` markers intact so
+   every later re-run can refresh them cleanly.
 5. Prints every `<<TEAM_AUTHORED:...>>` stub still waiting on a human.
 
-**Adopting into a repo that already uses Claude Code for something else?**
-This is handled automatically, not something you need to prepare for: a
-pre-existing `.claude/agents/*.md` or `.claude/hooks/*` that differs from
-what we'd vendor is moved aside (never deleted), not overwritten; a
-pre-existing `.claude/settings.json` is merged — anything it has that
+Nothing further to reconcile — go to Step 2.
+
+### Case B — the repo already has a `CLAUDE.md` with unrelated content
+
+If your team already uses Claude Code for something else, `CLAUDE.md`
+might already exist and have nothing to do with this framework. By
+default the scaffolder **refuses** rather than silently discarding it or
+silently generating a `CLAUDE.md` with none of the framework's governance
+content — you'll see a message like:
+
+```
+scaffold: CLAUDE.md already exists with no FROM_CONFIG markers — it
+doesn't look like framework-generated output. Refusing to modify it
+silently.
+```
+
+You have two ways forward, and they lead to different end states:
+
+| | Rename aside + re-run (recommended) | `--adopt-existing` |
+| --- | --- | --- |
+| **Command** | `mv CLAUDE.md CLAUDE.pre-ai-sdlc-framework.md`, then re-run scaffold | re-run scaffold with `--adopt-existing` |
+| **Result** | One coherent, canonical `CLAUDE.md` (Case A) — you manually port real content back into it | One file: your original content, then a delimiter, then the framework's content appended below it |
+| **Effort** | More upfront (manual porting) | Less upfront, but you'll likely have duplicate section headings (e.g. two `## Coding Conventions`) to clean up by hand |
+| **When to pick it** | Your existing `CLAUDE.md` is thin, or you want one clean file | Your existing `CLAUDE.md` is substantial and worth preserving verbatim |
+
+Either way, nothing existing is ever deleted — the worst case is a
+`.pre-ai-sdlc-framework.md` copy sitting next to the new file, or two
+sections with the same heading in one file, both easy to spot and clean
+up. See `docs/CONFORMANCE.md` Section B items 6–8 and Section D for the
+full behavior and its documented limits.
+
+**The same applies to a pre-existing `.claude/agents/*.md`, `.claude/hooks/*`,
+and `.claude/settings.json`** — handled automatically, not something you
+need to prepare for. A vendored file that differs from what we'd write is
+moved aside (never deleted), not overwritten. A pre-existing
+`.claude/settings.json` is merged: anything it has that
 `project.config.yml` can't express lands in `.claude/settings.local.json`,
-which this scaffolder never touches again. The one case requiring your
-input: a pre-existing `CLAUDE.md`/`REVIEW.md` with unrelated content is
-refused by default (you'll get a clear message) rather than silently
-gaining none of the framework's governance content — pass
-`--adopt-existing` to append the framework's required sections below your
-existing content instead of refusing, if you'd rather not rename the file
-and start clean. See `docs/CONFORMANCE.md` Section B items 6–8 and Section
-D for the full behavior and its documented limits.
+which this scaffolder never touches again.
 
 ## Step 2 — Edit `project.config.yml`
 
@@ -135,6 +181,13 @@ human. At minimum, write:
   opinion here on purpose.
 - **Escalation Contacts** — who gets paged on a Tier D/E stop. Don't
   leave this blank; an agent halting on Tier D needs to know who to tell.
+
+**If you went through Case B with `--adopt-existing`** (Step 1), do one
+more thing here: read the whole file once and delete any now-duplicate
+section — your original content likely already covers some of the
+`<<TEAM_AUTHORED:...>>` topics above (e.g. an existing "Architecture"
+section makes the appended, empty "Architecture Overview" stub
+redundant). This framework won't do that reconciliation for you.
 
 ## Step 4 — Know how git/PR operations are gated
 
