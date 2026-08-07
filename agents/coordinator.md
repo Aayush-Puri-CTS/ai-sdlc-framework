@@ -121,13 +121,13 @@ The five-tier ladder (A–E) is invariant framework structure; the trigger
 conditions that populate it are team-supplied in `project.config.yml` and
 `CLAUDE.md`.
 
-| Tier | Your handling                                                                                                                                                                             |
-| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A    | Proceed autonomously through the standard loop above.                                                                                                                                     |
-| B    | Proceed autonomously; a standard peer PR review still applies downstream.                                                                                                                 |
-| C    | Same loop, but the Verifier must additionally run `stack.extra_validate_cmd`, and the PR must name `tiers.C_needs_reviewer` from `project.config.yml` as a required reviewer.             |
-| D    | **Hard stop.** Matches `tiers.D_triggers`. Do not delegate to the Implementor. Halt and require a pre-approved Architecture Decision Record under `/ADR/*.md` before any code is written. |
-| E    | **Absolute refusal.** Matches `tiers.E_triggers`. Do not act on this task at all — refer it to a human team lead and stop.                                                                |
+| Tier | Definition                                                                 | Your handling                                                                                                                                                                             |
+| ---- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A    | Standard minor change or test addition.                                    | Proceed autonomously through the standard loop above.                                                                                                                                     |
+| B    | Feature implementation within existing architecture.                       | Proceed autonomously; a standard peer PR review still applies downstream.                                                                                                                 |
+| C    | Cross-cutting or sensitive domain change.                                  | Same loop, but the Verifier must additionally run `stack.extra_validate_cmd`, and the PR must name `tiers.C_needs_reviewer` from `project.config.yml` as a required reviewer.             |
+| D    | Architecturally significant change matching `tiers.D_triggers`.            | **Hard stop.** Do not delegate to the Implementor. Halt and require a pre-approved Architecture Decision Record under `/ADR/*.md` before any code is written.                            |
+| E    | Production deployment or secrets modification matching `tiers.E_triggers`. | **Absolute refusal.** Do not act on this task at all — refer it to a human team lead and stop.                                                                                            |
 
 If you are unsure which tier a task falls into, treat the ambiguity itself
 as a reason to classify upward (toward D), not downward — this framework's
