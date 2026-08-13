@@ -31,7 +31,7 @@ function scaffold(dir, extraArgs = []) {
   return spawnSync('node', [SCAFFOLD_SCRIPT, '--target', dir, '--skip-install', ...extraArgs], { encoding: 'utf8' });
 }
 
-for (const template of ['gradle-kotlin', 'xcode-swift', 'node-pnpm']) {
+for (const template of ['gradle-kotlin', 'xcode-swift', 'node-pnpm', 'php-laravel']) {
   test(`scaffolds cleanly from the ${template} template`, () => {
     const dir = freshTargetDir();
     try {
