@@ -38,12 +38,13 @@ for (const template of ['gradle-kotlin', 'xcode-swift', 'node-pnpm']) {
       const result = scaffold(dir, ['--template', template]);
       assert.equal(result.status, 0, result.stderr);
 
-      for (const f of ['CLAUDE.md', 'REVIEW.md', '.claude/settings.json', 'project.config.yml', '.claude/.ai-sdlc-version', 'CHANGELOG.md', '.mcp.json']) {
+      for (const f of ['CLAUDE.md', 'REVIEW.md', '.claude/settings.json', 'project.config.yml', '.claude/.ai-sdlc-version', 'CHANGELOG.md', 'changelog.d/README.md', 'scripts/cut-changelog-release.mjs', '.mcp.json']) {
         assert.ok(existsSync(path.join(dir, f)), `missing ${f}`);
       }
 
       const changelog = readFileSync(path.join(dir, 'CHANGELOG.md'), 'utf8');
-      assert.match(changelog, /## \[Unreleased\]/, 'CHANGELOG.md missing the [Unreleased] section');
+      assert.match(changelog, /changelog\.d/, 'CHANGELOG.md should point at changelog.d/ for pending entries');
+      assert.doesNotMatch(changelog, /## \[Unreleased\]/, 'CHANGELOG.md should not have a directly-edited [Unreleased] section (see changelog.d/ fragments instead)');
 
       const mcpConfig = JSON.parse(readFileSync(path.join(dir, '.mcp.json'), 'utf8'));
       assert.deepEqual(mcpConfig.mcpServers.repomix, { command: 'npx', args: ['-y', 'repomix', '--mcp'] });
