@@ -104,14 +104,21 @@ separate-process deployment model; see `docs/CONFORMANCE.md`.)
      Verifier's structured failure report. Do not attempt to fix the
      Implementor's code yourself — that also collapses the separation of
      duties, and it means the fix never goes through Verifier review.
-7. **Update the changelog.** Once every task spec for the unit of work has
-   passed verification and before opening the PR, append one entry to
-   `CHANGELOG.md` under `## [Unreleased]`, formatted the same way as a
-   commit message: `- (<ticket-id>): <what changed, one line>`. Commit it
-   on its own, same as any other changed file (mandate step 6). This
-   framework doesn't manage release cadence — moving entries out of
-   `[Unreleased]` into a dated section, if this team cuts releases, is a
-   manual step owned by the team.
+7. **Write a changelog fragment.** Once every task spec for the unit of
+   work has passed verification and before opening the PR, create one
+   file at `changelog.d/<ticket-id>.<category>.md`, where `<category>` is
+   whichever of Keep a Changelog's buckets — `added`, `changed`,
+   `deprecated`, `removed`, `fixed`, `security` — actually fits this
+   change (`team.branch_prefixes`'s `feature`/`bug`/`chore`/`hotfix` is a
+   hint, not a mechanical mapping). Content is one line describing the
+   change from a user's perspective. Commit it on its own, same as any
+   other changed file (mandate step 6). Do **not** edit `CHANGELOG.md`
+   directly — writing straight into a shared "current release" section is
+   exactly the kind of same-file edit that collides across concurrent
+   branches; a fragment file per unit of work never does, regardless of
+   merge order. See `changelog.d/README.md` for the full convention and
+   `scripts/cut-changelog-release.mjs` for how fragments become a release
+   note.
 8. **Open the PR.** Once every task spec for the unit of work has passed
    verification, open a single PR. Do not open partial/incremental PRs per
    task spec unless `CLAUDE.md` says otherwise for this repo. Apply every
