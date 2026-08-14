@@ -48,10 +48,13 @@ node scripts/scaffold.mjs --target <path> [--template <stack>] [--skip-install] 
 
 Vendors the framework core into `<path>` and hydrates its
 `CLAUDE.md`/`REVIEW.md`/`.claude/settings.json` from `project.config.yml`.
-Safe to re-run at any time — see `docs/ONBOARDING.md` for the full
-first-run-vs-repeat-run behavior and `docs/CONFORMANCE.md` for what
-happens when the target already has unrelated content at a path this
-framework wants to own.
+Also writes a starter `CHANGELOG.md` (only if one doesn't already exist —
+never touched again after that) and adds a `repomix` entry to
+`.mcp.json`'s `mcpServers` (creating the file if absent, never overwriting
+a team's own entry there). Safe to re-run at any time — see
+`docs/ONBOARDING.md` for the full first-run-vs-repeat-run behavior and
+`docs/CONFORMANCE.md` for what happens when the target already has
+unrelated content at a path this framework wants to own.
 
 | Option | Required | What it does |
 | --- | --- | --- |
@@ -90,7 +93,7 @@ flags, standard `npm run` behavior):
 | --- | --- |
 | `npm run scaffold -- --target <path> --template <stack>` | `node scripts/scaffold.mjs --target <path> --template <stack>` |
 | `npm run validate-config -- --config <path> --strict` | `node scripts/validate-config.mjs --config <path> --strict` |
-| `npm test` | `node --test` — runs everything in `test/` (36 tests as of this writing: config validation rules, the glob-matcher regression cases, and end-to-end scaffold runs for all three stack templates plus every adoption scenario) |
+| `npm test` | `node --test` — runs everything in `test/`: config validation rules, the glob-matcher regression cases, and end-to-end scaffold runs for every stack template plus every adoption scenario |
 
 ## Repo layout
 
@@ -98,7 +101,7 @@ flags, standard `npm run` behavior):
 agents/                  Coordinator/Implementor/Verifier role contracts
 hooks/                    verify-loop.sh, implementor-git-guard.sh (+ lib/)
 lib/ticket-source/        Ticket-intake adapter boundary (MCP + manual)
-templates/                CLAUDE.md / REVIEW.md / SPEC.md templates + stack starters
+templates/                CLAUDE.md / REVIEW.md / SPEC.md / CHANGELOG.md templates + stack starters
 scripts/                  validate-config.mjs, scaffold.mjs
 settings.base.json        Claude Code permission/hook shape
 project.config.yml        Reference example (mirrors the spec's schema section)
