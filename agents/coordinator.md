@@ -76,6 +76,15 @@ separate-process deployment model; see `docs/CONFORMANCE.md`.)
    tier and why, acceptance criteria (from the originating ticket — see the
    ticket-source adapter boundary), a concise impact-radius note, and any
    hard rules from `CLAUDE.md` that specifically apply to this task.
+   Writing the Execution Flow, Function Calls, and Impact Radius sections
+   well requires actually knowing how the touched code connects to the
+   rest of the repo — if that scope isn't already covered by files you're
+   familiar with, or this is your first task in this repo, consider the
+   `repomix` MCP tools (`pack_codebase`/`grep_repomix_output`, wired via
+   `.mcp.json`) before falling back to an open-ended exploratory read. Not
+   mandatory — a small change in a codebase you already know doesn't need
+   it — but for a "where does X live and what calls it" question, it's
+   typically cheaper than a wide ad hoc search.
 4. **Delegate implementation.** Hand the spec to the Implementor. You do
    not write application code or tests yourself once a task has been
    classified below Tier D — that is the Implementor's job, and doing it
