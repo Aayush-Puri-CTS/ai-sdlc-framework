@@ -43,18 +43,19 @@ and file an issue against this README.
 ### `node scripts/scaffold.mjs`
 
 ```sh
-node scripts/scaffold.mjs --target <path> [--template <stack>] [--skip-install] [--adopt-existing] [--with-ci]
+node scripts/scaffold.mjs --target <path> [--template <stack>] [--skip-install] [--adopt-existing] [--with-ci] [--with-release]
 ```
 
 Vendors the framework core into `<path>` and hydrates its
 `CLAUDE.md`/`REVIEW.md`/`.claude/settings.json` from `project.config.yml`.
-Also writes a starter `CHANGELOG.md` (only if one doesn't already exist —
-never touched again after that) and adds a `repomix` entry to
-`.mcp.json`'s `mcpServers` (creating the file if absent, never overwriting
-a team's own entry there). Safe to re-run at any time — see
-`docs/ONBOARDING.md` for the full first-run-vs-repeat-run behavior and
-`docs/CONFORMANCE.md` for what happens when the target already has
-unrelated content at a path this framework wants to own.
+Also writes a starter `CHANGELOG.md` and `changelog.d/README.md` (only if
+`CHANGELOG.md` doesn't already exist — never touched again after that)
+and adds a `repomix` entry to `.mcp.json`'s `mcpServers` (creating the
+file if absent, never overwriting a team's own entry there). Safe to
+re-run at any time — see `docs/ONBOARDING.md` for the full
+first-run-vs-repeat-run behavior and `docs/CONFORMANCE.md` for what
+happens when the target already has unrelated content at a path this
+framework wants to own.
 
 | Option | Required | What it does |
 | --- | --- | --- |
@@ -63,6 +64,7 @@ unrelated content at a path this framework wants to own.
 | `--skip-install` | No | Skips the automatic `npm install` for `js-yaml`/`ajv`/`minimatch` in the target repo. Use this if you'll install dependencies yourself (e.g. a CI step that already ran `npm ci`); if the dependencies genuinely aren't installed yet, the very next step (config validation) fails with a clear "run `npm install`" message rather than a cryptic module-not-found crash. |
 | `--adopt-existing` | No | Only matters if the target already has a `CLAUDE.md`/`REVIEW.md` that isn't this framework's own output (no `FROM_CONFIG` markers). Default behavior is to **refuse** rather than touch it; this flag instead **appends** the framework's required sections below a clearly marked delimiter, preserving the existing content above it untouched. |
 | `--with-ci` | No | Off by default. Additionally vendors `.github/workflows/ai-sdlc-validate.yml` (runs `validate-config.mjs --strict` on every push/PR) and a *named* PR template at `.github/PULL_REQUEST_TEMPLATE/ai-sdlc.md` — never replaces or collides with a repo's own default PR template. |
+| `--with-release` | No | Off by default. Additionally vendors `.github/workflows/ai-sdlc-release.yml`, which runs `scripts/cut-changelog-release.mjs` on a version tag push (`v*`) to consolidate `changelog.d/` fragments into `CHANGELOG.md`, then opens a PR with the result. |
 
 ### `node scripts/validate-config.mjs`
 
@@ -102,7 +104,7 @@ agents/                  Coordinator/Implementor/Verifier role contracts
 hooks/                    verify-loop.sh, implementor-git-guard.sh (+ lib/)
 lib/ticket-source/        Ticket-intake adapter boundary (MCP + manual)
 templates/                CLAUDE.md / REVIEW.md / SPEC.md / CHANGELOG.md templates + stack starters
-scripts/                  validate-config.mjs, scaffold.mjs
+scripts/                  validate-config.mjs, scaffold.mjs, cut-changelog-release.mjs
 settings.base.json        Claude Code permission/hook shape
 project.config.yml        Reference example (mirrors the spec's schema section)
 project.config.schema.json  JSON Schema for project.config.yml
