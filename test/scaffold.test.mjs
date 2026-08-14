@@ -38,9 +38,16 @@ for (const template of ['gradle-kotlin', 'xcode-swift', 'node-pnpm', 'php-larave
       const result = scaffold(dir, ['--template', template]);
       assert.equal(result.status, 0, result.stderr);
 
-      for (const f of ['CLAUDE.md', 'REVIEW.md', '.claude/settings.json', 'project.config.yml', '.claude/.ai-sdlc-version']) {
+      for (const f of ['CLAUDE.md', 'REVIEW.md', '.claude/settings.json', 'project.config.yml', '.claude/.ai-sdlc-version', 'CHANGELOG.md', 'changelog.d/README.md', 'scripts/cut-changelog-release.mjs', '.mcp.json']) {
         assert.ok(existsSync(path.join(dir, f)), `missing ${f}`);
       }
+
+      const changelog = readFileSync(path.join(dir, 'CHANGELOG.md'), 'utf8');
+      assert.match(changelog, /changelog\.d/, 'CHANGELOG.md should point at changelog.d/ for pending entries');
+      assert.doesNotMatch(changelog, /## \[Unreleased\]/, 'CHANGELOG.md should not have a directly-edited [Unreleased] section (see changelog.d/ fragments instead)');
+
+      const mcpConfig = JSON.parse(readFileSync(path.join(dir, '.mcp.json'), 'utf8'));
+      assert.deepEqual(mcpConfig.mcpServers.repomix, { command: 'npx', args: ['-y', 'repomix', '--mcp'] });
 
       const claudeMd = readFileSync(path.join(dir, 'CLAUDE.md'), 'utf8');
       assert.doesNotMatch(claudeMd, /<<FROM_CONFIG:/, 'a bare FROM_CONFIG placeholder was left unhydrated in CLAUDE.md');
@@ -109,6 +116,48 @@ test('project.config.yml is never overwritten by a second scaffold run', () => {
 
     const afterSecondRun = readFileSync(configPath, 'utf8');
     assert.ok(afterSecondRun.includes('a-real-team-name'), 'project.config.yml was clobbered by a second scaffold run');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('CHANGELOG.md is never overwritten by a second scaffold run', () => {
+  const dir = freshTargetDir();
+  try {
+    let result = scaffold(dir, ['--template', 'node-pnpm']);
+    assert.equal(result.status, 0, result.stderr);
+
+    const changelogPath = path.join(dir, 'CHANGELOG.md');
+    writeFileSync(changelogPath, readFileSync(changelogPath, 'utf8') + '- (PROJ-1): a real entry\n');
+
+    result = scaffold(dir);
+    assert.equal(result.status, 0, result.stderr);
+
+    const afterSecondRun = readFileSync(changelogPath, 'utf8');
+    assert.ok(afterSecondRun.includes('a real entry'), 'CHANGELOG.md was clobbered by a second scaffold run');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('.mcp.json preserves a foreign server and does not duplicate the repomix entry on re-scaffold', () => {
+  const dir = freshTargetDir();
+  try {
+    let result = scaffold(dir, ['--template', 'node-pnpm']);
+    assert.equal(result.status, 0, result.stderr);
+
+    const mcpPath = path.join(dir, '.mcp.json');
+    const mcpConfig = JSON.parse(readFileSync(mcpPath, 'utf8'));
+    mcpConfig.mcpServers['other-tool'] = { command: 'foo' };
+    mcpConfig.mcpServers.repomix.args = ['--custom-flag'];
+    writeFileSync(mcpPath, JSON.stringify(mcpConfig, null, 2) + '\n');
+
+    result = scaffold(dir);
+    assert.equal(result.status, 0, result.stderr);
+
+    const afterSecondRun = JSON.parse(readFileSync(mcpPath, 'utf8'));
+    assert.deepEqual(afterSecondRun.mcpServers['other-tool'], { command: 'foo' }, 'foreign MCP server entry was lost on re-scaffold');
+    assert.deepEqual(afterSecondRun.mcpServers.repomix.args, ['--custom-flag'], "a team's own customized repomix entry was overwritten on re-scaffold");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
