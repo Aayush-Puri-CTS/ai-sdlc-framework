@@ -4,7 +4,7 @@
 // (AI-SDLC-FRAMEWORK-SPEC.md section 9, "Automation Scaffolder").
 //
 // Usage:
-//   node scripts/scaffold.mjs --target <path> [--template <stack>] [--skip-install] [--adopt-existing] [--with-ci]
+//   node scripts/scaffold.mjs --target <path> [--template <stack>] [--skip-install] [--adopt-existing] [--with-ci] [--with-release]
 //
 // --template selects a starter project.config.yml from templates/stacks/
 // (gradle-kotlin | xcode-swift | node-pnpm) and is only used the FIRST
@@ -32,10 +32,20 @@
 // Every run also (a) writes a starter CHANGELOG.md if one doesn't already
 // exist at the target's root — never touched again after that, same
 // treatment as project.config.yml, since every later line in it is real
-// per-repo history — and (b) adds a "repomix" entry to .mcp.json's
-// mcpServers (creating the file if absent), only if that key isn't
-// already there — never overwrites a team's own repomix configuration or
-// touches any other server already listed.
+// per-repo history — (b) vendors changelog.d/README.md, the fragment-file
+// convention that feeds CHANGELOG.md at release time (see
+// scripts/cut-changelog-release.mjs; changelog.d/ entries are written per
+// unit of work by the Coordinator, never CHANGELOG.md directly, so
+// concurrent branches never conflict on the same file), and (c) adds a
+// "repomix" entry to .mcp.json's mcpServers (creating the file if
+// absent), only if that key isn't already there — never overwrites a
+// team's own repomix configuration or touches any other server already
+// listed.
+//
+// --with-release additionally vendors a GitHub Actions workflow
+// (.github/workflows/ai-sdlc-release.yml) that runs
+// scripts/cut-changelog-release.mjs on a version tag push and opens a PR
+// with the result — off by default, same reasoning as --with-ci.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, chmodSync, cpSync, renameSync } from 'node:fs';
 import path from 'node:path';
@@ -51,7 +61,7 @@ function die(msg) {
 }
 
 function parseArgs(argv) {
-  const args = { target: null, template: null, skipInstall: false, adoptExisting: false, withCi: false };
+  const args = { target: null, template: null, skipInstall: false, adoptExisting: false, withCi: false, withRelease: false };
   for (let i = 0; i < argv.length; i++) {
     switch (argv[i]) {
       case '--target': args.target = argv[++i]; break;
@@ -59,7 +69,8 @@ function parseArgs(argv) {
       case '--skip-install': args.skipInstall = true; break;
       case '--adopt-existing': args.adoptExisting = true; break;
       case '--with-ci': args.withCi = true; break;
-      default: die(`unrecognized argument "${argv[i]}". Usage: scaffold.mjs --target <path> [--template <stack>] [--skip-install] [--adopt-existing] [--with-ci]`);
+      case '--with-release': args.withRelease = true; break;
+      default: die(`unrecognized argument "${argv[i]}". Usage: scaffold.mjs --target <path> [--template <stack>] [--skip-install] [--adopt-existing] [--with-ci] [--with-release]`);
     }
   }
   if (!args.target) die('missing required --target <path-to-consuming-repo>.');
@@ -612,8 +623,18 @@ function main() {
   );
   vendorFile(path.join(FRAMEWORK_ROOT, 'ADR', '0000-template.md'), path.join(targetDir, 'ADR', '0000-template.md'), vendorOpts);
   vendorFile(
+    path.join(FRAMEWORK_ROOT, 'templates', 'changelog.d', 'README.md'),
+    path.join(targetDir, 'changelog.d', 'README.md'),
+    vendorOpts
+  );
+  vendorFile(
     path.join(FRAMEWORK_ROOT, 'scripts', 'validate-config.mjs'),
     path.join(targetDir, 'scripts', 'validate-config.mjs'),
+    vendorOpts
+  );
+  vendorFile(
+    path.join(FRAMEWORK_ROOT, 'scripts', 'cut-changelog-release.mjs'),
+    path.join(targetDir, 'scripts', 'cut-changelog-release.mjs'),
     vendorOpts
   );
   vendorFile(
@@ -630,6 +651,13 @@ function main() {
     vendorFile(
       path.join(FRAMEWORK_ROOT, 'templates', 'github', 'PULL_REQUEST_TEMPLATE.ai-sdlc.md'),
       path.join(targetDir, '.github', 'PULL_REQUEST_TEMPLATE', 'ai-sdlc.md'),
+      vendorOpts
+    );
+  }
+  if (args.withRelease) {
+    vendorFile(
+      path.join(FRAMEWORK_ROOT, 'templates', 'github', 'ai-sdlc-release.yml'),
+      path.join(targetDir, '.github', 'workflows', 'ai-sdlc-release.yml'),
       vendorOpts
     );
   }
