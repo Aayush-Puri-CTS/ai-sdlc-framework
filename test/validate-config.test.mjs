@@ -76,6 +76,7 @@ test('every real shipped config passes validation', () => {
     path.join(FRAMEWORK_ROOT, 'templates', 'stacks', 'gradle-kotlin.config.yml'),
     path.join(FRAMEWORK_ROOT, 'templates', 'stacks', 'node-pnpm.config.yml'),
     path.join(FRAMEWORK_ROOT, 'templates', 'stacks', 'xcode-swift.config.yml'),
+    path.join(FRAMEWORK_ROOT, 'templates', 'stacks', 'php-laravel.config.yml'),
   ]) {
     const result = spawnSync('node', [VALIDATE_SCRIPT, '--config', configPath], { encoding: 'utf8' });
     assert.equal(result.status, 0, `${configPath} failed:\n${result.stderr}`);

@@ -1,0 +1,100 @@
+# Starter project.config.yml for a PHP/Laravel stack.
+# Copied verbatim into a new consuming repo by `node scripts/scaffold.mjs
+# --template php-laravel` when that repo has no project.config.yml yet.
+# Edit every value below for your actual repo before your first task —
+# this is a starting point, not a finished config. In particular:
+# team.*, tiers.C_needs_reviewer, and ticket_source.* are almost
+# certainly wrong for your repo as shipped.
+#
+# Note on verify_hook.include_glob: Laravel's own convention does NOT
+# co-locate tests next to source (app/Models/Foo.php's test lives at
+# tests/Unit/FooTest.php or tests/Feature/FooTest.php, not beside it) —
+# unlike the other three starter templates, where the stack's own
+# convention IS co-located. include_glob below covers BOTH app/ and
+# tests/ (via brace alternation) specifically so editing a test file
+# directly still triggers Phase 1 via the "this file IS the test" self-
+# match path; editing app/ source will still correctly find no co-located
+# companion and just skip the test run (advisory, not blocking) — that's
+# accurate to how this stack actually works, not a bug to fix here.
+version: 1
+
+team:
+  name: "CHANGE_ME-engineering"
+  git_remote: "git@github.com:CHANGE_ME/CHANGE_ME.git"
+  branch_prefixes:
+    feature: "feat/"
+    bug: "bug/"
+    chore: "chore/"
+    hotfix: "hotfix/"
+
+stack:
+  package_manager: "composer"
+  lint_cmd: "./vendor/bin/pint {file}"
+  test_cmd: "php artisan test --filter={base}"
+  extra_validate_cmd: "./vendor/bin/phpstan analyse"
+  flags:
+    no_install: true
+
+verify_hook:
+  include_glob: "{app,tests}/**/*.php"
+  test_pattern: "{base}Test.php"
+  skip_globs:
+    - "**/*.md"
+    - "**/vendor/**"
+    - "**/bootstrap/cache/**"
+    - "**/storage/**"
+  loop_budget: 3
+
+hard_rules:
+  - id: "no-live-data"
+    statement: "No connections to live/production endpoints or databases."
+    audit: static
+    review_gate: blocking
+  - id: "no-pii-in-logs"
+    statement: "No PII or sensitive account details written to analytics or console logs."
+    audit: verifier
+    review_gate: blocking
+
+tiers:
+  D_triggers:
+    - "public API contract change"
+    - "database schema or migration modification"
+  E_triggers:
+    - "production environment secrets or deployment key modification"
+  C_needs_reviewer: "CHANGE_ME-architecture-team"
+
+permissions:
+  deny_read:
+    - ".env*"
+    - "**/secrets/**"
+    - "**/*.pem"
+    - "**/storage/oauth-private.key"
+    - "**/storage/oauth-public.key"
+  deny_cmd_patterns:
+    - "php artisan migrate:fresh"
+    - "php artisan db:wipe"
+    - "rm -rf /"
+  ask_cmd_patterns:
+    - "git commit"
+    - "git push"
+    - "gh pr create"
+    - "php artisan migrate"
+  ask_write_paths:
+    - "**/composer.json"
+    - "**/config/**"
+    - "**/.github/workflows/**"
+  allow_write_paths:
+    - "app/**"
+    - "tests/**"
+
+ticket_source:
+  type: "manual"
+
+# Governance labels applied to every PR the Coordinator opens. "ai-assisted"
+# is mandatory (enforced by scripts/validate-config.mjs); add more freely.
+pull_request:
+  required_labels:
+    - "ai-assisted"
+
+observability:
+  enabled: false

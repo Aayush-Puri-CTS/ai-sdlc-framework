@@ -111,13 +111,16 @@ only runs `stack.extra_validate_cmd` on Stop/SubagentStop (whole-project).
 ### 8. End-to-End Verification
 
 **Check:** the mobile-team worked example in `docs/ONBOARDING.md`
-(`gradle-kotlin` and `xcode-swift` templates) and a backend example
-(`node-pnpm`) each scaffold and validate successfully without editing
-anything under this framework repo's `agents/`, `hooks/`, `templates/`,
-or `scripts/`.
+(`gradle-kotlin` and `xcode-swift` templates) and backend examples
+(`node-pnpm`, `php-laravel`) each scaffold and validate successfully
+without editing anything under this framework repo's `agents/`, `hooks/`,
+`templates/`, or `scripts/`.
 
 **Pass condition:** confirmed for all three templates during Phase 5 (see
-conversation history for the actual scaffold runs and their output).
+conversation history for the actual scaffold runs and their output);
+`php-laravel` added later and covered by `test/scaffold.test.mjs`'s
+per-template loop and `test/validate-config.test.mjs`'s
+"every real shipped config passes validation" check.
 
 ## B. Standing Decisions (Read Before Relying On This Framework)
 

@@ -7,7 +7,7 @@
 //   node scripts/scaffold.mjs --target <path> [--template <stack>] [--skip-install] [--adopt-existing] [--with-ci] [--with-release]
 //
 // --template selects a starter project.config.yml from templates/stacks/
-// (gradle-kotlin | xcode-swift | node-pnpm) and is only used the FIRST
+// (gradle-kotlin | xcode-swift | node-pnpm | php-laravel) and is only used the FIRST
 // time — if <target>/project.config.yml already exists, it is never
 // overwritten; the scaffolder re-hydrates CLAUDE.md/REVIEW.md/settings.json
 // from whatever is already there instead. Re-running this script after
@@ -683,7 +683,7 @@ function main() {
   const configPath = path.join(targetDir, 'project.config.yml');
   if (!existsSync(configPath)) {
     if (!args.template) {
-      die('no project.config.yml exists at --target and no --template was given. Pass --template <gradle-kotlin|xcode-swift|node-pnpm>, or hand-write project.config.yml first.');
+      die('no project.config.yml exists at --target and no --template was given. Pass --template <gradle-kotlin|xcode-swift|node-pnpm|php-laravel>, or hand-write project.config.yml first.');
     }
     const starterPath = path.join(FRAMEWORK_ROOT, 'templates', 'stacks', `${args.template}.config.yml`);
     if (!existsSync(starterPath)) {

@@ -26,8 +26,8 @@ consuming repo after scaffolding.
 node scripts/scaffold.mjs --target /path/to/consuming-repo --template gradle-kotlin
 ```
 
-`--template` is one of `gradle-kotlin`, `xcode-swift`, or `node-pnpm`
-(`templates/stacks/*.config.yml`) — only used the first time; a repo that
+`--template` is one of `gradle-kotlin`, `xcode-swift`, `node-pnpm`, or
+`php-laravel` (`templates/stacks/*.config.yml`) — only used the first time; a repo that
 already has `project.config.yml` is never overwritten, only re-hydrated.
 
 Full walkthrough, including what to edit and in what order: see
@@ -60,7 +60,7 @@ framework wants to own.
 | Option | Required | What it does |
 | --- | --- | --- |
 | `--target <path>` | Yes | The consuming repo to scaffold into. Created if it doesn't exist. |
-| `--template <gradle-kotlin\|xcode-swift\|node-pnpm>` | Only on a repo's first scaffold | Selects a starter `project.config.yml` from `templates/stacks/`. Ignored (with a log line) if the target already has a `project.config.yml` — that file is never overwritten by this flag or anything else. |
+| `--template <gradle-kotlin\|xcode-swift\|node-pnpm\|php-laravel>` | Only on a repo's first scaffold | Selects a starter `project.config.yml` from `templates/stacks/`. Ignored (with a log line) if the target already has a `project.config.yml` — that file is never overwritten by this flag or anything else. |
 | `--skip-install` | No | Skips the automatic `npm install` for `js-yaml`/`ajv`/`minimatch` in the target repo. Use this if you'll install dependencies yourself (e.g. a CI step that already ran `npm ci`); if the dependencies genuinely aren't installed yet, the very next step (config validation) fails with a clear "run `npm install`" message rather than a cryptic module-not-found crash. |
 | `--adopt-existing` | No | Only matters if the target already has a `CLAUDE.md`/`REVIEW.md` that isn't this framework's own output (no `FROM_CONFIG` markers). Default behavior is to **refuse** rather than touch it; this flag instead **appends** the framework's required sections below a clearly marked delimiter, preserving the existing content above it untouched. |
 | `--with-ci` | No | Off by default. Additionally vendors `.github/workflows/ai-sdlc-validate.yml` (runs `validate-config.mjs --strict` on every push/PR) and a *named* PR template at `.github/PULL_REQUEST_TEMPLATE/ai-sdlc.md` — never replaces or collides with a repo's own default PR template. |
@@ -95,7 +95,7 @@ flags, standard `npm run` behavior):
 | --- | --- |
 | `npm run scaffold -- --target <path> --template <stack>` | `node scripts/scaffold.mjs --target <path> --template <stack>` |
 | `npm run validate-config -- --config <path> --strict` | `node scripts/validate-config.mjs --config <path> --strict` |
-| `npm test` | `node --test` — runs everything in `test/`: config validation rules, the glob-matcher regression cases, and end-to-end scaffold runs for every stack template plus every adoption scenario |
+| `npm test` | `node --test` — runs everything in `test/` (config validation rules, the glob-matcher regression cases, and end-to-end scaffold runs for all four stack templates plus every adoption scenario) |
 
 ## Repo layout
 

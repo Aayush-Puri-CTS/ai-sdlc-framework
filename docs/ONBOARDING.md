@@ -4,7 +4,8 @@ This is the "adopt this in a day" guide. It walks through onboarding a
 mobile team end-to-end — both the Android/Gradle side and the iOS/Xcode
 side, since "mobile team" usually means both — but every step generalizes
 to any stack. If you're onboarding a web or backend team, use
-`--template node-pnpm` instead and skip the platform-specific asides.
+`--template node-pnpm` (Node/TypeScript) or `--template php-laravel`
+(PHP/Laravel) instead and skip the platform-specific asides.
 
 ## Distribution Model
 
