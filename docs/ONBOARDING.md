@@ -86,12 +86,17 @@ one that did was already this framework's own output. The scaffolder:
    templates into `.claude/` and `ADR/` in your repo.
 2. Writes a starter `project.config.yml` (only if one doesn't already
    exist — it will never overwrite yours on a second run).
-3. Installs `js-yaml`/`ajv`/`minimatch` (`npm install`) so the tooling
+3. Writes a starter `CHANGELOG.md` (same one-time-only treatment as
+   `project.config.yml`) and adds a `repomix` entry to `.mcp.json`'s
+   `mcpServers` (creating the file if it doesn't exist; never overwrites a
+   server already there, including your own `repomix` entry if you've
+   customized it) — see "Changelog and Repomix MCP" below.
+4. Installs `js-yaml`/`ajv`/`minimatch` (`npm install`) so the tooling
    actually runs.
-4. Validates the config and generates `CLAUDE.md`, `REVIEW.md`, and
+5. Validates the config and generates `CLAUDE.md`, `REVIEW.md`, and
    `.claude/settings.json` from it, with `FROM_CONFIG` markers intact so
    every later re-run can refresh them cleanly.
-5. Prints every `<<TEAM_AUTHORED:...>>` stub still waiting on a human.
+6. Prints every `<<TEAM_AUTHORED:...>>` stub still waiting on a human.
 
 Nothing further to reconcile — go to Step 2.
 
@@ -131,6 +136,50 @@ moved aside (never deleted), not overwritten. A pre-existing
 `.claude/settings.json` is merged: anything it has that
 `project.config.yml` can't express lands in `.claude/settings.local.json`,
 which this scaffolder never touches again.
+
+### Changelog and Repomix MCP
+
+Every scaffold run also does a few small, additive things at the target's
+root, none gated on `isFirstAdoption`:
+
+- **`CHANGELOG.md`** — written from `templates/CHANGELOG.template.md` only
+  if one doesn't already exist, then never touched again by this
+  scaffolder (same treatment as `project.config.yml` — everything after
+  the first write is real history).
+- **`changelog.d/`** — vendored with its own `README.md` explaining the
+  fragment-file convention. Rather than editing `CHANGELOG.md` directly,
+  the Coordinator creates one file per completed unit of work,
+  `changelog.d/<ticket-id>.<category>.md` (`category` is one of Keep a
+  Changelog's buckets — `added`/`changed`/`deprecated`/`removed`/`fixed`/
+  `security`), before opening each PR (`agents/coordinator.md` mandate
+  step 7). This is deliberately NOT a shared "append here" section:
+  multiple branches in flight at once would all be inserting text at the
+  same anchor point in the same file, which is exactly the kind of change
+  git's merge algorithm conflicts on most often. One file per unit of
+  work means two branches never touch the same file, so they never
+  conflict regardless of which one merges first, and a slow-to-merge
+  branch's fragment simply rolls into whichever release cut happens after
+  it lands — no manual reconciliation needed.
+- At release time, `scripts/cut-changelog-release.mjs` reads every
+  fragment in `changelog.d/`, groups them by category, writes a new dated
+  section into `CHANGELOG.md`, and deletes the fragments it consumed. Run
+  it by hand, or scaffold with `--with-release` to vendor
+  `.github/workflows/ai-sdlc-release.yml`, which runs it automatically on
+  a version tag push (`v*`) and opens a PR with the result rather than
+  pushing straight to your default branch — see that workflow file's own
+  header comment for why.
+- **`.mcp.json`** — a `repomix` entry is added to `mcpServers` (creating
+  the file if it doesn't exist yet) so the Coordinator can pack this or
+  another repo into AI-friendly context on demand
+  (`npx -y repomix --mcp`, exposing `pack_codebase`/
+  `pack_remote_repository`/`read_repomix_output`/`grep_repomix_output`) —
+  useful during initial adoption of a large or unfamiliar codebase, or any
+  time delegating a broad "where does X live" question to a fresh
+  Implementor/Verifier subagent would otherwise cost a lot of exploratory
+  tool calls. Only added if that key isn't already present — a team's own
+  `repomix` configuration, or any other MCP server already listed, is
+  never touched. Edit or delete the entry in `.mcp.json` if you don't want
+  it.
 
 ## Step 2 — Edit `project.config.yml`
 

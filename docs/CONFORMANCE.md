@@ -298,6 +298,101 @@ two `## Coding Conventions` sections) by hand. **Check:** after
 `--adopt-existing`, read the resulting file once, deliberately, before
 the first task — this framework won't do it for you.
 
+### 9. Spec shape includes execution flow, function calls, rationale, and impact radius — RESOLVED
+
+`templates/SPEC.template.md` requires four sections beyond the original
+change/acceptance-criteria/scope shape: **Rationale** (the why, distinct
+from "Change"'s what), **Execution Flow** (where in the running system
+this change takes effect), **Function Calls** (the concrete call surface
+touched), and **Impact Radius** (a concise blast-radius note — other
+callers, downstream modules, backward-compatibility concerns).
+
+**Decision:** added so the Implementor and Verifier — who, per
+`lib/ticket-source/README.md`, never go back to the original ticket —
+have enough structural context in the spec itself to place a change
+correctly and judge its blast radius, without re-deriving either from the
+codebase. Not mechanically validated (nothing schema-checks spec prose
+the way `validate-config.mjs` checks `project.config.yml`); it's a
+Coordinator behavioral contract, same enforcement class as the rest of
+`agents/coordinator.md`. **Check:** a `docs/specs/*.md` file is missing
+one of these four headings.
+
+### 10. `CHANGELOG.md` and `.mcp.json` are vendored additively, unconditionally, every run — RESOLVED
+
+Unlike the invariant-core paths in Section B item 6 or `project.config.yml`,
+these two are not gated on `isFirstAdoption` at all — the checks that make
+each one safe are already unconditional:
+
+- **`CHANGELOG.md`** — written from `templates/CHANGELOG.template.md` only
+  if the file doesn't exist yet at the target's root; if it exists (from
+  any prior run, this framework's or not), it is never touched again. Same
+  reasoning as `project.config.yml`: everything past the first write is
+  real history, not something to regenerate.
+- **`.mcp.json`** — `mcpServers.repomix` is added only if that exact key
+  isn't already present; every other key, including any other MCP server
+  or a team's own hand-edited `repomix` entry, is preserved untouched. No
+  merge-then-regenerate step exists here the way it does for
+  `settings.json`'s `permissions.*` (Section B item 7) — there is nothing
+  to regenerate, since nothing here is derived from `project.config.yml`.
+
+**Decision:** both are one-shot, additive writes with no ongoing
+reconciliation logic, deliberately simpler than the `settings.json`/
+`CLAUDE.md` machinery — neither file's content is generated from
+`project.config.yml`, so there is no "does this match what we'd currently
+generate" question to answer on re-scaffold, only "does this key already
+exist." **Check:** hand-edit both files in a scaffolded repo, re-run the
+scaffolder, and confirm neither edit is lost
+(`test/scaffold.test.mjs`: "CHANGELOG.md is never overwritten..." and
+"`.mcp.json` preserves a foreign server...").
+
+### 11. Changelog entries are per-unit-of-work fragments, not a shared `[Unreleased]` section — RESOLVED
+
+An earlier design had the Coordinator append each entry directly into
+`CHANGELOG.md` under a shared `## [Unreleased]` heading. With multiple
+branches in flight at once — the normal case, not an edge case — every
+one of them would be inserting a line at the same anchor point in the
+same file. That's exactly the diff shape git's merge algorithm conflicts
+on most often (identical surrounding context on both sides), and it has
+no good answer for a branch that merges after a release was already cut:
+its entry would land in a section that no longer represents "unreleased."
+
+**Decision:** switched to the changelog-fragment pattern used by
+towncrier, changesets, and reno — one file per unit of work,
+`changelog.d/<ticket-id>.<category>.md` (`agents/coordinator.md` mandate
+step 7, `changelog.d/README.md`), consolidated into a dated `CHANGELOG.md`
+section only at release time by `scripts/cut-changelog-release.mjs`. Two
+branches now never touch the same file regardless of merge order, and a
+slow-to-merge branch's fragment simply rolls into whichever release cut
+happens after it lands — no reconciliation, manual or otherwise, is
+needed. The consolidation script itself validates every fragment's
+filename shape before writing or deleting anything, so one malformed
+fragment blocks the whole cut rather than partially consuming the good
+ones. **Check:** `test/cut-changelog-release.test.mjs` — grouping and
+ordering, newest-release-on-top insertion, malformed-fragment refusal,
+and the empty-`changelog.d/` no-op case.
+
+### 12. The release-cut workflow opens a PR instead of pushing to the default branch — RESOLVED
+
+`.github/workflows/ai-sdlc-release.yml` (vendored via `--with-release`,
+triggered on a `v*` tag push) runs `cut-changelog-release.mjs` and then
+opens a PR with the result, rather than committing straight to the
+default branch with the workflow's own token.
+
+**Decision:** every other write to a consuming repo's default branch in
+this framework goes through a human-reviewed PR (`git commit`/`git push`/
+`gh pr create` all sit behind `permissions.ask_cmd_patterns` for the
+Coordinator — Section A item 5). A CI bot silently pushing the changelog
+consolidation would be the one unreviewed exception to that; giving it a
+PR instead keeps the guarantee uniform across every writer, human-driven
+or not. The workflow reads `changelog.d/` **at the tagged commit**, not
+the default branch's current tip, so the resulting release notes reflect
+exactly what was tagged — a fragment merged to the default branch after
+the tag rolls into whichever release is cut next, consistent with item 11
+above. **Check:** confirm the workflow's `permissions:` block grants
+`contents: write`/`pull-requests: write` (not more), and that it exits
+cleanly with no PR opened when `changelog.d/` has nothing but its own
+`README.md`.
+
 ## C. Fixes applied 2026-08-04 (`framework-reviews/FRAMEWORK-REVIEW.md`)
 
 A review cross-checked against two real consuming repos found several

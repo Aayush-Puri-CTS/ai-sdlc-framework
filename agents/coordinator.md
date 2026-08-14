@@ -70,9 +70,11 @@ separate-process deployment model; see `docs/CONFORMANCE.md`.)
    checked by a hook — getting this right is on you, not something the
    framework catches if you don't.
 3. **Specify.** Write a task specification to `docs/specs/<task-name>.md`
-   before delegating implementation. A spec should state: the change being
-   made, its autonomy tier and why, acceptance criteria (from the
-   originating ticket — see the ticket-source adapter boundary), and any
+   before delegating implementation, following `templates/SPEC.template.md`'s
+   shape exactly: the change being made and its rationale, the execution
+   flow it fits into, the specific function calls it touches, its autonomy
+   tier and why, acceptance criteria (from the originating ticket — see the
+   ticket-source adapter boundary), a concise impact-radius note, and any
    hard rules from `CLAUDE.md` that specifically apply to this task.
 4. **Delegate implementation.** Hand the spec to the Implementor. You do
    not write application code or tests yourself once a task has been
@@ -102,7 +104,22 @@ separate-process deployment model; see `docs/CONFORMANCE.md`.)
      Verifier's structured failure report. Do not attempt to fix the
      Implementor's code yourself — that also collapses the separation of
      duties, and it means the fix never goes through Verifier review.
-7. **Open the PR.** Once every task spec for the unit of work has passed
+7. **Write a changelog fragment.** Once every task spec for the unit of
+   work has passed verification and before opening the PR, create one
+   file at `changelog.d/<ticket-id>.<category>.md`, where `<category>` is
+   whichever of Keep a Changelog's buckets — `added`, `changed`,
+   `deprecated`, `removed`, `fixed`, `security` — actually fits this
+   change (`team.branch_prefixes`'s `feature`/`bug`/`chore`/`hotfix` is a
+   hint, not a mechanical mapping). Content is one line describing the
+   change from a user's perspective. Commit it on its own, same as any
+   other changed file (mandate step 6). Do **not** edit `CHANGELOG.md`
+   directly — writing straight into a shared "current release" section is
+   exactly the kind of same-file edit that collides across concurrent
+   branches; a fragment file per unit of work never does, regardless of
+   merge order. See `changelog.d/README.md` for the full convention and
+   `scripts/cut-changelog-release.mjs` for how fragments become a release
+   note.
+8. **Open the PR.** Once every task spec for the unit of work has passed
    verification, open a single PR. Do not open partial/incremental PRs per
    task spec unless `CLAUDE.md` says otherwise for this repo. Apply every
    label in `pull_request.required_labels` from `project.config.yml` to

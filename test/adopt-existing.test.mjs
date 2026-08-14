@@ -289,3 +289,23 @@ test('--with-ci: absent by default, vendors both namespaced GitHub artifacts whe
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// --- --with-release ---
+
+test('--with-release: absent by default, vendors the release workflow when passed', () => {
+  const dir = freshTargetDir();
+  try {
+    let result = scaffold(dir, ['--template', 'node-pnpm']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.ok(
+      !existsSync(path.join(dir, '.github', 'workflows', 'ai-sdlc-release.yml')),
+      'ai-sdlc-release.yml should not be vendored without --with-release'
+    );
+
+    result = scaffold(dir, ['--with-release']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.ok(existsSync(path.join(dir, '.github', 'workflows', 'ai-sdlc-release.yml')));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

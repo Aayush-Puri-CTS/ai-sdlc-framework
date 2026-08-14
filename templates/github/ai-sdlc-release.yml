@@ -1,0 +1,54 @@
+# Vendored by scripts/scaffold.mjs (--with-release) into
+# .github/workflows/ai-sdlc-release.yml.
+#
+# Triggered by pushing a version tag (e.g. `v1.2.0`). Runs
+# scripts/cut-changelog-release.mjs to consolidate changelog.d/ fragments
+# into a new dated CHANGELOG.md section, then opens a PR with that change
+# rather than pushing straight to the default branch — every write to the
+# default branch in this framework goes through a human-reviewed PR (see
+# agents/coordinator.md, docs/CONFORMANCE.md), and a CI bot silently
+# pushing the changelog update would be the one unreviewed exception to
+# that, so it doesn't get one. If changelog.d/ is empty at the tag, no PR
+# is opened — nothing to review.
+#
+# The tag itself is the release marker; this workflow reads whatever
+# changelog.d/ fragments exist AT THE TAGGED COMMIT, not the default
+# branch's current tip — so the release notes reflect exactly what was
+# tagged, and a fragment merged to the default branch after the tag rolls
+# into whichever release is cut next, not this one.
+name: AI-SDLC changelog release cut
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  cut-changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+      - run: npm ci
+      - run: node scripts/cut-changelog-release.mjs --version "${GITHUB_REF_NAME#v}"
+      - name: Open a PR with the cut, if anything changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- CHANGELOG.md changelog.d; then
+            echo "cut-changelog: no pending changelog.d fragments at this tag — nothing to open a PR for."
+            exit 0
+          fi
+          BRANCH="changelog/${GITHUB_REF_NAME}"
+          git checkout -b "$BRANCH"
+          git add CHANGELOG.md changelog.d
+          git -c user.name="ai-sdlc-framework-bot" -c user.email="actions@github.com" commit -m "changelog: cut ${GITHUB_REF_NAME}"
+          git push origin "$BRANCH"
+          gh pr create --title "Cut changelog for ${GITHUB_REF_NAME}" \
+            --body "Consolidates \`changelog.d/\` fragments present at ${GITHUB_REF_NAME} into \`CHANGELOG.md\`. Opened automatically by ai-sdlc-release.yml — review and merge to record this release, or close if this tag shouldn't have triggered a cut." \
+            --base main
