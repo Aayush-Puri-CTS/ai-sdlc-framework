@@ -139,17 +139,35 @@ which this scaffolder never touches again.
 
 ### Changelog and Repomix MCP
 
-Every scaffold run also does two small, additive things at the target's
-root, neither gated on `isFirstAdoption`:
+Every scaffold run also does a few small, additive things at the target's
+root, none gated on `isFirstAdoption`:
 
 - **`CHANGELOG.md`** — written from `templates/CHANGELOG.template.md` only
   if one doesn't already exist, then never touched again by this
   scaffolder (same treatment as `project.config.yml` — everything after
-  the first write is real history). The Coordinator appends one entry per
-  completed unit of work under `## [Unreleased]` before opening each PR
-  (`agents/coordinator.md` mandate step 7); this framework doesn't manage
-  release cadence, so moving entries into a dated section on release is a
-  manual step your team owns if you cut them.
+  the first write is real history).
+- **`changelog.d/`** — vendored with its own `README.md` explaining the
+  fragment-file convention. Rather than editing `CHANGELOG.md` directly,
+  the Coordinator creates one file per completed unit of work,
+  `changelog.d/<ticket-id>.<category>.md` (`category` is one of Keep a
+  Changelog's buckets — `added`/`changed`/`deprecated`/`removed`/`fixed`/
+  `security`), before opening each PR (`agents/coordinator.md` mandate
+  step 7). This is deliberately NOT a shared "append here" section:
+  multiple branches in flight at once would all be inserting text at the
+  same anchor point in the same file, which is exactly the kind of change
+  git's merge algorithm conflicts on most often. One file per unit of
+  work means two branches never touch the same file, so they never
+  conflict regardless of which one merges first, and a slow-to-merge
+  branch's fragment simply rolls into whichever release cut happens after
+  it lands — no manual reconciliation needed.
+- At release time, `scripts/cut-changelog-release.mjs` reads every
+  fragment in `changelog.d/`, groups them by category, writes a new dated
+  section into `CHANGELOG.md`, and deletes the fragments it consumed. Run
+  it by hand, or scaffold with `--with-release` to vendor
+  `.github/workflows/ai-sdlc-release.yml`, which runs it automatically on
+  a version tag push (`v*`) and opens a PR with the result rather than
+  pushing straight to your default branch — see that workflow file's own
+  header comment for why.
 - **`.mcp.json`** — a `repomix` entry is added to `mcpServers` (creating
   the file if it doesn't exist yet) so the Coordinator can pack this or
   another repo into AI-friendly context on demand
