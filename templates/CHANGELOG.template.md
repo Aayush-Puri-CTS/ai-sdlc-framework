@@ -9,21 +9,26 @@
   should ever regenerate or overwrite.
 
   Unlike CLAUDE.md/REVIEW.md, this file carries no FROM_CONFIG markers and
-  is not derived from project.config.yml — entries are freeform prose the
-  Coordinator writes by hand, one per completed unit of work, per
-  agents/coordinator.md's mandate. Format matches this framework's commit
-  message convention for consistency: "(<ticket-id>): <what changed>".
-
-  This framework doesn't manage release cadence or versioning — if this
-  team cuts dated releases, moving entries out of [Unreleased] into a
-  dated section is a manual step owned by the team, not something any
-  hook or script here does for you.
+  is not derived from project.config.yml. Pending changes for the next
+  release are NOT recorded directly in this file — they live as
+  individual fragment files under changelog.d/ (one per unit of work, see
+  that directory's own README) so that concurrent branches never conflict
+  editing the same section of this file. scripts/cut-changelog-release.mjs
+  consolidates those fragments into a new dated section here at release
+  time.
 -->
 
 # Changelog
 
-All notable changes to this repo are recorded here, one entry per
-completed unit of work, added by the Coordinator right before opening
-that unit of work's PR (see `agents/coordinator.md`).
+All notable changes to this repo are recorded here, one dated section per
+release, consolidated from `changelog.d/` fragments by
+`scripts/cut-changelog-release.mjs` at release time (automatically on a
+version tag push, if this repo was scaffolded with `--with-release`).
 
-## [Unreleased]
+Pending changes not yet released live in `changelog.d/`, not below this
+line — see that directory's `README.md` for the fragment file convention.
+
+This framework doesn't manage version numbering or release cadence; the
+version label in each section below is whatever was passed to
+`cut-changelog-release.mjs --version`, typically derived from the git tag
+that triggered the release.
