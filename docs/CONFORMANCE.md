@@ -345,6 +345,54 @@ scaffolder, and confirm neither edit is lost
 (`test/scaffold.test.mjs`: "CHANGELOG.md is never overwritten..." and
 "`.mcp.json` preserves a foreign server...").
 
+### 11. Changelog entries are per-unit-of-work fragments, not a shared `[Unreleased]` section — RESOLVED
+
+An earlier design had the Coordinator append each entry directly into
+`CHANGELOG.md` under a shared `## [Unreleased]` heading. With multiple
+branches in flight at once — the normal case, not an edge case — every
+one of them would be inserting a line at the same anchor point in the
+same file. That's exactly the diff shape git's merge algorithm conflicts
+on most often (identical surrounding context on both sides), and it has
+no good answer for a branch that merges after a release was already cut:
+its entry would land in a section that no longer represents "unreleased."
+
+**Decision:** switched to the changelog-fragment pattern used by
+towncrier, changesets, and reno — one file per unit of work,
+`changelog.d/<ticket-id>.<category>.md` (`agents/coordinator.md` mandate
+step 7, `changelog.d/README.md`), consolidated into a dated `CHANGELOG.md`
+section only at release time by `scripts/cut-changelog-release.mjs`. Two
+branches now never touch the same file regardless of merge order, and a
+slow-to-merge branch's fragment simply rolls into whichever release cut
+happens after it lands — no reconciliation, manual or otherwise, is
+needed. The consolidation script itself validates every fragment's
+filename shape before writing or deleting anything, so one malformed
+fragment blocks the whole cut rather than partially consuming the good
+ones. **Check:** `test/cut-changelog-release.test.mjs` — grouping and
+ordering, newest-release-on-top insertion, malformed-fragment refusal,
+and the empty-`changelog.d/` no-op case.
+
+### 12. The release-cut workflow opens a PR instead of pushing to the default branch — RESOLVED
+
+`.github/workflows/ai-sdlc-release.yml` (vendored via `--with-release`,
+triggered on a `v*` tag push) runs `cut-changelog-release.mjs` and then
+opens a PR with the result, rather than committing straight to the
+default branch with the workflow's own token.
+
+**Decision:** every other write to a consuming repo's default branch in
+this framework goes through a human-reviewed PR (`git commit`/`git push`/
+`gh pr create` all sit behind `permissions.ask_cmd_patterns` for the
+Coordinator — Section A item 5). A CI bot silently pushing the changelog
+consolidation would be the one unreviewed exception to that; giving it a
+PR instead keeps the guarantee uniform across every writer, human-driven
+or not. The workflow reads `changelog.d/` **at the tagged commit**, not
+the default branch's current tip, so the resulting release notes reflect
+exactly what was tagged — a fragment merged to the default branch after
+the tag rolls into whichever release is cut next, consistent with item 11
+above. **Check:** confirm the workflow's `permissions:` block grants
+`contents: write`/`pull-requests: write` (not more), and that it exits
+cleanly with no PR opened when `changelog.d/` has nothing but its own
+`README.md`.
+
 ## C. Fixes applied 2026-08-04 (`framework-reviews/FRAMEWORK-REVIEW.md`)
 
 A review cross-checked against two real consuming repos found several
