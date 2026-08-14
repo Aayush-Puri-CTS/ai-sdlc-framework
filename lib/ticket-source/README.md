@@ -46,9 +46,11 @@ and ask the human to paste the ticket instead.
 
 Regardless of adapter, the spec written to `docs/specs/<feature>.md` must
 follow `templates/SPEC.template.md`'s shape (feature name, source
-provenance, autonomy tier classification, acceptance criteria, in-scope
-hard rules). That shape — not any particular ticketing platform's schema
-— is what the Implementor and Verifier are entitled to assume.
+provenance, autonomy tier classification, change rationale, execution
+flow, function calls touched, acceptance criteria, impact radius,
+in-scope hard rules). That shape — not any particular ticketing
+platform's schema — is what the Implementor and Verifier are entitled to
+assume.
 
 ## Least privilege
 
