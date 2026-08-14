@@ -180,7 +180,10 @@ root, none gated on `isFirstAdoption`:
   tool calls. Only added if that key isn't already present — a team's own
   `repomix` configuration, or any other MCP server already listed, is
   never touched. Edit or delete the entry in `.mcp.json` if you don't want
-  it.
+  it. Being connected doesn't make it self-triggering — `agents/coordinator.md`
+  mandate step 3 names it explicitly as something to consider while
+  writing a spec's Execution Flow/Function Calls/Impact Radius sections,
+  which is what actually makes the Coordinator reach for it.
 
 ## Step 2 — Edit `project.config.yml`
 
