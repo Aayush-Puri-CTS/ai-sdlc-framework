@@ -24,12 +24,41 @@
 the ticket title, but specific enough that the Implementor doesn't need
 to re-derive scope.>>
 
+## Rationale
+
+<<Why this change is being made — the underlying problem or goal driving
+it. Distinct from "Change" above: that section is the what, this is the
+why. If the ticket doesn't state a rationale, say so rather than
+inventing one.>>
+
+## Execution Flow
+
+<<How this change fits into the running system — entry point(s), the
+sequence of steps or module boundaries a request/invocation crosses, and
+where in that sequence this change's behavior actually takes effect.
+Enough for the Implementor to place the change correctly without
+re-deriving the surrounding flow from scratch.>>
+
+## Function Calls
+
+<<The specific functions/methods/endpoints being added, modified, or
+removed, and what calls them or what they call — concrete enough that the
+Implementor doesn't need to re-derive the call graph. A short list is
+fine; this isn't a full call-graph dump.>>
+
 ## Acceptance Criteria
 
 <<Bulleted list. Transcribed from the ticket (or the human's manual paste)
 — do not invent criteria the source didn't state. If the source didn't
 state any, that is a fallback-to-manual-adapter situation, not a
 fill-in-the-gap situation.>>
+
+## Impact Radius
+
+<<Concise — a short bulleted list of what else this change could affect:
+other callers/consumers of the touched functions, downstream modules,
+config or schema consumers, backward-compatibility concerns. Keep this
+tight; it's a blast-radius check, not a restatement of Scope Notes.>>
 
 ## Scope Notes
 
