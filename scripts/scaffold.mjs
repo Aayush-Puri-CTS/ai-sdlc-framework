@@ -28,6 +28,14 @@
 // (.github/workflows/ai-sdlc-validate.yml) and a named PR template
 // (.github/PULL_REQUEST_TEMPLATE/ai-sdlc.md) — off by default, since CI
 // wiring is a more consequential change than the rest of scaffolding.
+//
+// Every run also (a) writes a starter CHANGELOG.md if one doesn't already
+// exist at the target's root — never touched again after that, same
+// treatment as project.config.yml, since every later line in it is real
+// per-repo history — and (b) adds a "repomix" entry to .mcp.json's
+// mcpServers (creating the file if absent), only if that key isn't
+// already there — never overwrites a team's own repomix configuration or
+// touches any other server already listed.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, chmodSync, cpSync, renameSync } from 'node:fs';
 import path from 'node:path';
@@ -499,6 +507,43 @@ function ensurePackageJson(targetDir) {
   return changed;
 }
 
+function ensureChangelog(targetDir) {
+  const changelogPath = path.join(targetDir, 'CHANGELOG.md');
+  if (existsSync(changelogPath)) return;
+  const templatePath = path.join(FRAMEWORK_ROOT, 'templates', 'CHANGELOG.template.md');
+  const templateText = readFileSync(templatePath, 'utf8');
+  writeFileSync(changelogPath, stripLeadingTemplateComment(templateText, templatePath));
+}
+
+// The `--mcp` flag runs Repomix as an MCP server exposing pack_codebase/
+// pack_remote_repository/read_repomix_output/grep_repomix_output — useful
+// for the Coordinator to pull AI-friendly context from this or another
+// repo on demand (e.g. during initial adoption of a large, unfamiliar
+// codebase) without a separate CLI step. `npx -y` avoids requiring a
+// project-local install.
+const REPOMIX_MCP_SERVER = { command: 'npx', args: ['-y', 'repomix', '--mcp'] };
+
+// Additive only: creates .mcp.json if absent, adds the "repomix" server if
+// that key isn't already present, and never touches any other server or
+// top-level key a team already has there. Returns whether it wrote
+// anything, so the caller can decide whether to log it.
+function hydrateMcpConfig(targetDir) {
+  const mcpPath = path.join(targetDir, '.mcp.json');
+  let existing = {};
+  if (existsSync(mcpPath)) {
+    try {
+      existing = JSON.parse(readFileSync(mcpPath, 'utf8'));
+    } catch (err) {
+      die(`.mcp.json exists but is not valid JSON (${err.message}) — fix or remove it by hand before scaffolding.`);
+    }
+  }
+  existing.mcpServers = existing.mcpServers || {};
+  if (existing.mcpServers.repomix) return false;
+  existing.mcpServers.repomix = REPOMIX_MCP_SERVER;
+  writeFileSync(mcpPath, JSON.stringify(existing, null, 2) + '\n');
+  return true;
+}
+
 function ensureGitignore(targetDir) {
   const gitignorePath = path.join(targetDir, '.gitignore');
   const required = ['node_modules/', '.claude/hooks/.state/'];
@@ -622,7 +667,16 @@ function main() {
     console.log('scaffold: project.config.yml already exists — leaving it as-is.');
   }
 
-  // 3. Node tooling dependencies (needed by validate-config.mjs and every
+  // 3. CHANGELOG.md — same never-overwritten-once-present treatment as
+  // project.config.yml (see ensureChangelog).
+  ensureChangelog(targetDir);
+
+  // 4. .mcp.json — additive only; see hydrateMcpConfig.
+  if (hydrateMcpConfig(targetDir)) {
+    console.log('scaffold: added the "repomix" MCP server to .mcp.json (npx -y repomix --mcp) — lets the Coordinator pack this or another repo into AI-friendly context on demand; edit or remove the entry if this team doesn\'t want it.');
+  }
+
+  // 5. Node tooling dependencies (needed by validate-config.mjs and every
   // hooks/lib/*.mjs helper, regardless of the team's own stack).
   const pkgChanged = ensurePackageJson(targetDir);
   ensureGitignore(targetDir);
@@ -641,7 +695,7 @@ function main() {
     console.log('scaffold: --skip-install set — run `npm install` in the target repo before using validate-config.mjs or the hooks.');
   }
 
-  // 4. Validate BEFORE hydrating — hydration output is only meaningful
+  // 6. Validate BEFORE hydrating — hydration output is only meaningful
   // against a config that already passes schema/semantic validation
   // (this also satisfies spec section 9's "executes validate-config.mjs
   // to confirm schema integrity" as a hard gate, not an afterthought).
@@ -666,7 +720,7 @@ function main() {
     die('project.config.yml failed validation — fix it and re-run the scaffolder before CLAUDE.md/REVIEW.md/settings.json will be (re)generated.');
   }
 
-  // 5. Hydrate CLAUDE.md, REVIEW.md, settings.json from the now-valid config.
+  // 7. Hydrate CLAUDE.md, REVIEW.md, settings.json from the now-valid config.
   const config = yaml.load(readFileSync(configPath, 'utf8'));
   const values = buildFromConfigValues(config);
   hydrateMarkdown(path.join(FRAMEWORK_ROOT, 'templates', 'CLAUDE.template.md'), path.join(targetDir, 'CLAUDE.md'), values, args.adoptExisting, notices);
@@ -680,7 +734,7 @@ function main() {
 
   console.log('scaffold: CLAUDE.md, REVIEW.md, and .claude/settings.json are hydrated.');
 
-  // 6. Surface what still needs a human, rather than letting it hide
+  // 8. Surface what still needs a human, rather than letting it hide
   // silently until someone stumbles on a stub during a real task.
   const stubs = [
     ...findTeamAuthoredStubs(path.join(targetDir, 'CLAUDE.md')),
@@ -691,7 +745,7 @@ function main() {
     console.log(stubs.join('\n'));
   }
 
-  // 7. Anything moved aside, migrated, or appended rather than cleanly
+  // 9. Anything moved aside, migrated, or appended rather than cleanly
   // written needs a human to actually look at it — surfaced distinctly
   // from the routine success line above, not buried inside it.
   if (notices.length > 0) {
