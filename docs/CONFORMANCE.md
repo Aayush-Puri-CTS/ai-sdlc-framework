@@ -396,6 +396,30 @@ above. **Check:** confirm the workflow's `permissions:` block grants
 cleanly with no PR opened when `changelog.d/` has nothing but its own
 `README.md`.
 
+### 13. Repomix is referenced in the Coordinator's mandate, not just vendored — RESOLVED
+
+Wiring `repomix` into `.mcp.json` (item 10) makes its tools *callable* in
+any session, but a connected MCP server is not, by itself, an instruction
+— nothing about it being present tells the Coordinator when using it
+would actually help. For a while after it was first vendored, that's all
+that existed: the tool was available, but `agents/coordinator.md` never
+mentioned it, so whether it was ever used came down entirely to
+unprompted model judgment in a given session, not anything this framework
+actually mandated.
+
+**Decision:** mandate step 3 (Specify) now names `repomix`'s
+`pack_codebase`/`grep_repomix_output` tools explicitly, tied to a concrete
+trigger: writing the spec's Execution Flow/Function Calls/Impact Radius
+sections (item 9) requires actually knowing how the touched code connects
+to the rest of the repo, and that's exactly the "where does X live" class
+of question these tools answer more cheaply than an open-ended
+exploratory read. Deliberately phrased as "consider," not a hard
+requirement — a small change in a codebase the Coordinator already knows
+doesn't need it, and mechanically forcing a tool call for every spec would
+be process for its own sake. **Check:** `agents/coordinator.md` mandate
+step 3 names `repomix` by tool name, not just by cross-reference to
+`docs/ONBOARDING.md`.
+
 ## C. Fixes applied 2026-08-04 (`framework-reviews/FRAMEWORK-REVIEW.md`)
 
 A review cross-checked against two real consuming repos found several
