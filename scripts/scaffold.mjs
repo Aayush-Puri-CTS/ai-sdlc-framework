@@ -46,6 +46,11 @@
 // (.github/workflows/ai-sdlc-release.yml) that runs
 // scripts/cut-changelog-release.mjs on a version tag push and opens a PR
 // with the result — off by default, same reasoning as --with-ci.
+//
+// Also vendors the repo-guide-draft skill (.claude/skills/repo-guide-draft/
+// SKILL.md) unconditionally, like agents/hooks — it's inert until a human
+// explicitly invokes it, so it carries none of the automation/CI blast
+// radius that gates --with-ci/--with-release behind a flag.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, chmodSync, cpSync, renameSync } from 'node:fs';
 import path from 'node:path';
@@ -616,6 +621,11 @@ function main() {
   vendorTree(path.join(FRAMEWORK_ROOT, 'hooks'), path.join(targetDir, '.claude', 'hooks'), vendorOpts);
   chmodExecutablesRecursive(path.join(targetDir, '.claude', 'hooks'));
   vendorTree(path.join(FRAMEWORK_ROOT, 'lib', 'ticket-source'), path.join(targetDir, '.claude', 'ticket-source'), vendorOpts);
+  vendorTree(
+    path.join(FRAMEWORK_ROOT, 'templates', 'skills', 'repo-guide-draft'),
+    path.join(targetDir, '.claude', 'skills', 'repo-guide-draft'),
+    vendorOpts
+  );
   vendorFile(
     path.join(FRAMEWORK_ROOT, 'templates', 'SPEC.template.md'),
     path.join(targetDir, '.claude', 'templates', 'SPEC.template.md'),
