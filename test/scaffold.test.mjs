@@ -38,7 +38,7 @@ for (const template of ['gradle-kotlin', 'xcode-swift', 'node-pnpm', 'php-larave
       const result = scaffold(dir, ['--template', template]);
       assert.equal(result.status, 0, result.stderr);
 
-      for (const f of ['CLAUDE.md', 'REVIEW.md', '.claude/settings.json', 'project.config.yml', '.claude/.ai-sdlc-version', 'CHANGELOG.md', 'changelog.d/README.md', 'scripts/cut-changelog-release.mjs', '.mcp.json']) {
+      for (const f of ['CLAUDE.md', 'REVIEW.md', '.claude/settings.json', 'project.config.yml', '.claude/.ai-sdlc-version', 'CHANGELOG.md', 'changelog.d/README.md', 'scripts/cut-changelog-release.mjs', '.mcp.json', '.claude/skills/repo-guide-draft/SKILL.md']) {
         assert.ok(existsSync(path.join(dir, f)), `missing ${f}`);
       }
 

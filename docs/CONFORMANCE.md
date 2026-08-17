@@ -420,6 +420,39 @@ be process for its own sake. **Check:** `agents/coordinator.md` mandate
 step 3 names `repomix` by tool name, not just by cross-reference to
 `docs/ONBOARDING.md`.
 
+### 14. `repo-guide-draft` is a standalone drafting aid, not a synced artifact — RESOLVED
+
+The skill (`.claude/skills/repo-guide-draft/SKILL.md`) uses `repomix` to
+scan a repo and writes `docs/AI-GUIDE-DRAFT.md`: stack, structure,
+conventions, test/check commands, and proposed (never applied)
+deny/ask/allow permission entries. Two design choices here were made
+deliberately narrow, not as an oversight:
+
+- **It does not feed into `CLAUDE.md`/`REVIEW.md`/`project.config.yml`
+  automatically.** Doing so would create a second source of truth for
+  exactly the content `CLAUDE.md` already owns (the same duplication the
+  Zero Command Duplication check in Section A item 3 exists to prevent
+  one level down), and it would mean an algorithmically-generated
+  permissions proposal could land in `.claude/settings.json` without a
+  human ever reviewing it — the opposite of this framework's separation-
+  of-duties posture. The draft is meant to be read once, hand-transcribed
+  from, then deleted or archived — never re-read by anything.
+- **Re-invocation refuses to overwrite an existing draft**, the same
+  treatment as `project.config.yml`/`CHANGELOG.md` (item 10) — not the
+  marker-based partial-regeneration scheme `CLAUDE.md` uses. That scheme
+  exists because `CLAUDE.md` needs to stay continuously synced with
+  `project.config.yml` across many re-scaffolds; this draft has no such
+  ongoing-sync requirement (it's an intentionally one-shot snapshot), so
+  the simpler "refuse and let the human move it aside" rule is sufficient
+  and avoids inventing machinery this artifact doesn't need.
+
+**Decision:** vendored unconditionally (like `agents/`/`hooks/`), not
+behind a flag — the skill is inert until a developer explicitly invokes
+it, carrying none of the automation/CI blast radius that gates
+`--with-ci`/`--with-release`. **Check:** invoke the skill twice in a row
+in a scaffolded repo; the second invocation must refuse and leave the
+first draft byte-for-byte untouched.
+
 ## C. Fixes applied 2026-08-04 (`framework-reviews/FRAMEWORK-REVIEW.md`)
 
 A review cross-checked against two real consuming repos found several
