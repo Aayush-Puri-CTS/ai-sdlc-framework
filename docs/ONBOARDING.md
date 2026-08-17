@@ -83,8 +83,9 @@ flowchart TD
 This is the path above whenever a `CLAUDE.md` didn't already exist, or the
 one that did was already this framework's own output. The scaffolder:
 
-1. Vendors `agents/`, `hooks/`, `lib/ticket-source/`, and the spec/ADR
-   templates into `.claude/` and `ADR/` in your repo.
+1. Vendors `agents/`, `hooks/`, `lib/ticket-source/`, the
+   `repo-guide-draft` skill, and the spec/ADR templates into `.claude/`
+   and `ADR/` in your repo.
 2. Writes a starter `project.config.yml` (only if one doesn't already
    exist — it will never overwrite yours on a second run).
 3. Writes a starter `CHANGELOG.md` (same one-time-only treatment as
@@ -184,6 +185,26 @@ root, none gated on `isFirstAdoption`:
   mandate step 3 names it explicitly as something to consider while
   writing a spec's Execution Flow/Function Calls/Impact Radius sections,
   which is what actually makes the Coordinator reach for it.
+
+### The `repo-guide-draft` skill
+
+Vendored to `.claude/skills/repo-guide-draft/SKILL.md`, invoked explicitly
+(`/repo-guide-draft`) — not run automatically by anything. It uses the
+`repomix` MCP server to scan the repo and writes `docs/AI-GUIDE-DRAFT.md`:
+a standalone, one-time draft covering stack, structure, conventions,
+test/check commands, and **proposed** (not applied) deny/ask/allow
+permission entries, structured so a developer can copy pieces of it
+straight into `CLAUDE.md`'s `TEAM_AUTHORED` stubs, `REVIEW.md`, and
+`project.config.yml`'s `permissions` block.
+
+This is deliberately a one-shot drafting aid, not a synced artifact —
+nothing in this framework reads `docs/AI-GUIDE-DRAFT.md` back, and the
+skill refuses to overwrite it if it already exists (same treatment as
+`project.config.yml`/`CHANGELOG.md`): move the old draft aside by hand if
+you want a fresh one. Most useful right after first adopting this
+framework into a repo you didn't build yourself, when the
+`TEAM_AUTHORED` stubs and the permissions block are otherwise a blank
+page.
 
 ## Step 2 — Edit `project.config.yml`
 
