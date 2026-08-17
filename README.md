@@ -103,7 +103,7 @@ flags, standard `npm run` behavior):
 agents/                  Coordinator/Implementor/Verifier role contracts
 hooks/                    verify-loop.sh, implementor-git-guard.sh (+ lib/)
 lib/ticket-source/        Ticket-intake adapter boundary (MCP + manual)
-templates/                CLAUDE.md / REVIEW.md / SPEC.md / CHANGELOG.md templates + stack starters
+templates/                CLAUDE.md / REVIEW.md / SPEC.md / CHANGELOG.md templates + stack starters + skills/
 scripts/                  validate-config.mjs, scaffold.mjs, cut-changelog-release.mjs
 settings.base.json        Claude Code permission/hook shape
 project.config.yml        Reference example (mirrors the spec's schema section)
