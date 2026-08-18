@@ -40,3 +40,11 @@ interacts with.>>
 <<Name the human approver(s) required before implementation may begin.
 An agent may draft this ADR, but Tier D means an agent may not implement
 against it until a human has actually approved it here.>>
+
+## Reviewer Comments (optional)
+
+<<Optional — omit this section entirely, or leave it blank, if the
+reviewer has nothing to add. Use it for anything that doesn't belong in
+Approval itself: concerns raised during review, conditions attached to
+an approval, or context a future reader would want if this decision is
+ever revisited or superseded.>>
