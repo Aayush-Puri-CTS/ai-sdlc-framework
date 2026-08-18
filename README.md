@@ -97,6 +97,17 @@ flags, standard `npm run` behavior):
 | `npm run validate-config -- --config <path> --strict` | `node scripts/validate-config.mjs --config <path> --strict` |
 | `npm test` | `node --test` — runs everything in `test/` (config validation rules, the glob-matcher regression cases, and end-to-end scaffold runs for all four stack templates plus every adoption scenario) |
 
+## Vendored skills
+
+Both are vendored unconditionally into every scaffolded repo (no flag
+needed) — inert until a developer explicitly invokes them, so neither
+carries the automation/CI blast radius that gates `--with-ci`/`--with-release`.
+
+| Skill | Invoke | What it does |
+| --- | --- | --- |
+| `repo-guide-draft` | `/repo-guide-draft` | Scans the repo with `repomix` and writes a **one-shot** `docs/AI-GUIDE-DRAFT.md` — stack, structure, conventions, test commands, and proposed (never applied) `deny`/`ask`/`allow` permissions — for a developer to hand-transcribe into `CLAUDE.md`/`REVIEW.md`/`project.config.yml`. Refuses to overwrite an existing draft. |
+| `session-handoff` | `/session-handoff` | Writes/refreshes `.claude/hooks/.state/HANDOFF.md` — a **living** snapshot (active spec, tier, status, open questions) for a fresh session to pick up from when context usage is climbing. Local-only (gitignored) and always overwritten — the opposite idempotency rule from `repo-guide-draft`. A `SessionStart` hook (`hooks/session-start-handoff.mjs`) surfaces it into the next session automatically. |
+
 ## Repo layout
 
 ```
