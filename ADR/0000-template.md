@@ -3,6 +3,14 @@
   Copy this file to ADR/NNNN-short-title.md for each Tier D change
   (AI-SDLC-FRAMEWORK-SPEC.md section 6). A Tier D task may not begin
   implementation until an ADR following this shape is approved.
+
+  How the Context/Alternatives Considered/Consequences sections get
+  drafted is not prescribed. Working through them via a structured,
+  interactive design-interrogation process (e.g. a design-review skill
+  that questions a proposal against the repo's own docs one point at a
+  time) is encouraged, not required — this framework stays agnostic
+  about which tool does that questioning; only the resulting ADR's shape
+  is standardized.
 -->
 
 # NNNN. <<Short, specific title — not "database changes", but "switch
