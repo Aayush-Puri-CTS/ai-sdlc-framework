@@ -38,7 +38,7 @@ for (const template of ['gradle-kotlin', 'xcode-swift', 'node-pnpm', 'php-larave
       const result = scaffold(dir, ['--template', template]);
       assert.equal(result.status, 0, result.stderr);
 
-      for (const f of ['CLAUDE.md', 'REVIEW.md', '.claude/settings.json', 'project.config.yml', '.claude/.ai-sdlc-version', 'CHANGELOG.md', 'changelog.d/README.md', 'scripts/cut-changelog-release.mjs', '.mcp.json', '.claude/skills/repo-guide-draft/SKILL.md']) {
+      for (const f of ['CLAUDE.md', 'REVIEW.md', '.claude/settings.json', 'project.config.yml', '.claude/.ai-sdlc-version', 'CHANGELOG.md', 'changelog.d/README.md', 'scripts/cut-changelog-release.mjs', '.mcp.json', '.claude/skills/repo-guide-draft/SKILL.md', '.claude/skills/session-handoff/SKILL.md', '.claude/hooks/session-start-handoff.mjs']) {
         assert.ok(existsSync(path.join(dir, f)), `missing ${f}`);
       }
 
@@ -62,6 +62,10 @@ for (const template of ['gradle-kotlin', 'xcode-swift', 'node-pnpm', 'php-larave
       assert.ok(!('PreToolUse' in settings.hooks), 'PreToolUse should not be wired by default (see CONFORMANCE.md item B.1)');
       assert.ok(settings.permissions.deny.includes('Edit(.claude/hooks/**)'), 'control-file deny protection missing');
       assert.ok(settings.permissions.ask.includes('Edit(project.config.yml)'), 'control-file ask protection missing');
+      assert.ok(
+        settings.hooks.SessionStart.some((group) => group.hooks.some((h) => h.command.includes('session-start-handoff.mjs'))),
+        'session-start-handoff.mjs is not wired into the SessionStart hook group'
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
