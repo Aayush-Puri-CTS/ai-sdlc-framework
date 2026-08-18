@@ -182,6 +182,17 @@ Keep your own thread free of raw tool-execution noise from delegated
 work — that detail belongs in the Implementor's and Verifier's own
 (ephemeral) contexts. Retain, across compaction: active `docs/specs/*.md`
 contents, the current tier classification, and the manifest of files
-touched so far. Session-resumption state lives under
-`.claude/hooks/.state/` — treat it as hook-owned, not something you
-hand-edit.
+touched so far.
+
+If context usage is climbing toward the session's limit mid-task (e.g.
+visible via `/context`), invoke the `session-handoff` skill rather than
+relying on auto-compaction to preserve what matters — it writes a
+structured snapshot to `.claude/hooks/.state/HANDOFF.md` that a fresh
+session picks up automatically via a `SessionStart` hook, no manual
+paste required. If a `SessionStart` hook surfaces a handoff note from a
+prior session, read it first, then delete
+`.claude/hooks/.state/HANDOFF.md` once its content is incorporated or
+confirmed stale — don't leave a consumed note for a future session to
+trip over. Beyond that one file, session-resumption state under
+`.claude/hooks/.state/` is otherwise hook-owned, not something you
+hand-edit directly.

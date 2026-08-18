@@ -48,9 +48,14 @@
 // with the result — off by default, same reasoning as --with-ci.
 //
 // Also vendors the repo-guide-draft skill (.claude/skills/repo-guide-draft/
-// SKILL.md) unconditionally, like agents/hooks — it's inert until a human
-// explicitly invokes it, so it carries none of the automation/CI blast
-// radius that gates --with-ci/--with-release behind a flag.
+// SKILL.md) and the session-handoff skill (.claude/skills/session-handoff/
+// SKILL.md) unconditionally, like agents/hooks — both are inert until a
+// human explicitly invokes them, so neither carries the automation/CI
+// blast radius that gates --with-ci/--with-release behind a flag.
+// session-handoff pairs with hooks/session-start-handoff.mjs (vendored as
+// part of hooks/ and wired into settings.base.json's SessionStart group):
+// the skill writes .claude/hooks/.state/HANDOFF.md, the hook surfaces it
+// into a fresh session automatically.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, chmodSync, cpSync, renameSync } from 'node:fs';
 import path from 'node:path';
@@ -624,6 +629,11 @@ function main() {
   vendorTree(
     path.join(FRAMEWORK_ROOT, 'templates', 'skills', 'repo-guide-draft'),
     path.join(targetDir, '.claude', 'skills', 'repo-guide-draft'),
+    vendorOpts
+  );
+  vendorTree(
+    path.join(FRAMEWORK_ROOT, 'templates', 'skills', 'session-handoff'),
+    path.join(targetDir, '.claude', 'skills', 'session-handoff'),
     vendorOpts
   );
   vendorFile(

@@ -475,6 +475,60 @@ template or the mandate itself. The ADR's own shape — what fields the
 finished document must have — remains standardized regardless of how it
 was drafted.
 
+### 16. `session-handoff` is a living, always-overwritten snapshot — the opposite idempotency rule from `repo-guide-draft` — RESOLVED
+
+The skill (`.claude/skills/session-handoff/SKILL.md`) writes
+`.claude/hooks/.state/HANDOFF.md` — active spec, tier, done/pending
+status, files touched, and anything decided in-session that isn't yet
+written into a spec or ADR — for a developer to hand off deliberately
+when they notice (via `/context`) a session approaching its limit,
+instead of relying on Claude Code's own auto-compaction to preserve what
+matters.
+
+- **Always overwritten on every invocation**, deliberately the opposite
+  rule from `repo-guide-draft` (item 14, refuse-if-exists). The two
+  artifacts have opposite lifecycles: `repo-guide-draft` is a one-shot
+  snapshot a human reviews once and whose prior edits must be protected;
+  `HANDOFF.md` is "current state as of right now," and the previous
+  version's only job was to get the task to this point — once past it,
+  stale content is noise, not something worth protecting.
+- **Local-only, not git-tracked.** `.claude/hooks/.state/` is already
+  gitignored (`ensureGitignore`), which is the right call here, not a
+  limitation to route around: it means two developers' handoff notes can
+  never collide, the same class of problem a shared, git-tracked
+  `context.md` would have (see the earlier multi-dev-context research
+  discussion). This is same-developer, next-session continuity, not a
+  team-shared artifact — a team wanting cross-developer handoff would
+  need a different, deliberately-committed artifact instead.
+- **`hooks/session-start-handoff.mjs`** (wired into `.claude/settings.json`'s
+  `SessionStart` hooks unconditionally, no flag) surfaces `HANDOFF.md`'s
+  content into a fresh session automatically via Claude Code's
+  `hookSpecificOutput.additionalContext` contract, and exits silently
+  (status 0, no output) whenever the file doesn't exist — the
+  overwhelmingly common case, and this must never be the reason a
+  session fails to start. It does **not** delete the file after
+  surfacing it: `SessionStart` also fires on `/clear` and `/compact`, not
+  only a genuinely new session, so auto-deleting on any `SessionStart`
+  risks destroying a note before a real fresh session ever saw it.
+  Clearing a consumed note is left to whoever reads it — the hook's own
+  injected message says so explicitly, and `agents/coordinator.md`'s
+  Context Management section repeats the instruction.
+
+**Decision:** vendored unconditionally, same reasoning as
+`repo-guide-draft` (inert/on-demand, no automation blast radius). One
+honest caveat: the exact JSON shape Claude Code expects for a
+`SessionStart` hook's `additionalContext` injection is not re-verified
+against current Claude Code hook documentation at the time this was
+written — `hooks/session-start-handoff.mjs`'s own header comment flags
+this as the line to check first if it ever stops working. **Check:**
+`test/session-start-handoff.test.mjs` covers the file-present/
+file-absent/env-var-unset cases directly; verifying the JSON actually
+gets consumed as context by a live Claude Code session is not something
+this framework's test suite can exercise (no test harness spins up a
+real session), so that link is closer to "instructional, unverified at
+this layer" than the fully mechanical guarantees elsewhere in this
+document.
+
 ## C. Fixes applied 2026-08-04 (`framework-reviews/FRAMEWORK-REVIEW.md`)
 
 A review cross-checked against two real consuming repos found several
