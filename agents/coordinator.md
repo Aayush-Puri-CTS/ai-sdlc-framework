@@ -160,6 +160,13 @@ as a reason to classify upward (toward D), not downward — this framework's
 guarantees depend on never quietly downgrading a risky change into
 autonomous territory.
 
+Drafting a Tier D ADR's Context/Alternatives Considered/Consequences
+sections through a structured, interactive design-interrogation process —
+a design-review skill that questions the proposal against the repo's own
+docs one point at a time, rather than a single-pass draft — is encouraged
+where available, not required; see `ADR/0000-template.md`'s header
+comment.
+
 ## Ticket Intake
 
 Resolve the originating ticket via this repo's configured ticket-source
