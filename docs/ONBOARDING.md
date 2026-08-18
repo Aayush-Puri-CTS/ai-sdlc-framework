@@ -84,8 +84,8 @@ This is the path above whenever a `CLAUDE.md` didn't already exist, or the
 one that did was already this framework's own output. The scaffolder:
 
 1. Vendors `agents/`, `hooks/`, `lib/ticket-source/`, the
-   `repo-guide-draft` skill, and the spec/ADR templates into `.claude/`
-   and `ADR/` in your repo.
+   `repo-guide-draft` and `session-handoff` skills, and the spec/ADR
+   templates into `.claude/` and `ADR/` in your repo.
 2. Writes a starter `project.config.yml` (only if one doesn't already
    exist — it will never overwrite yours on a second run).
 3. Writes a starter `CHANGELOG.md` (same one-time-only treatment as
@@ -205,6 +205,33 @@ you want a fresh one. Most useful right after first adopting this
 framework into a repo you didn't build yourself, when the
 `TEAM_AUTHORED` stubs and the permissions block are otherwise a blank
 page.
+
+### The `session-handoff` skill and its `SessionStart` hook
+
+Vendored to `.claude/skills/session-handoff/SKILL.md`, invoked explicitly
+(`/session-handoff`) — for when you notice context usage climbing
+(`/context`) mid-task and would rather hand off deliberately than let
+Claude Code's auto-compaction summarize the session lossily. It writes
+`.claude/hooks/.state/HANDOFF.md`: active spec, tier, done/pending
+status, files touched, and anything decided this session that isn't yet
+written into a spec or ADR — the one category of information a fresh
+session-start really would lose otherwise.
+
+Unlike `repo-guide-draft`, this file is **always overwritten**, not a
+one-shot draft — it's a living "current state" snapshot, useful only
+until the task moves past it. It's also local-only:
+`.claude/hooks/.state/` is already gitignored, so two developers' handoff
+notes never collide.
+
+The other half is `hooks/session-start-handoff.mjs`, wired into
+`.claude/settings.json`'s `SessionStart` hooks automatically (no flag
+needed) — it surfaces `HANDOFF.md`'s content into a fresh session on its
+own, so nobody has to manually paste it in. It never deletes the file
+itself (`SessionStart` also fires on `/clear`/`/compact`, not only a
+genuinely new session); once a session has read a surfaced note and
+either continued the task or confirmed it's done, delete
+`.claude/hooks/.state/HANDOFF.md` yourself so a future session doesn't
+trip over a stale one.
 
 ## Step 2 — Edit `project.config.yml`
 
