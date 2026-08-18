@@ -453,6 +453,28 @@ it, carrying none of the automation/CI blast radius that gates
 in a scaffolded repo; the second invocation must refuse and leave the
 first draft byte-for-byte untouched.
 
+### 15. How a Tier D ADR gets drafted is intentionally unspecified — ACCEPTED
+
+`ADR/0000-template.md` and `agents/coordinator.md`'s tier table say a Tier
+D task needs a pre-approved ADR before any code is written, but neither
+prescribes *how* the Context/Alternatives Considered/Consequences
+sections get written — free-hand drafting, a structured interactive
+design-interrogation process (a design-review skill that questions a
+proposal against the repo's own docs one point at a time), or anything
+else a team prefers.
+
+**Decision:** stays unspecified on purpose. This framework's invariant
+core doesn't hardcode a stack's tools (Section A item 2, Domain
+Isolation) for the same reason it shouldn't hardcode which third-party
+design-review tool a team uses to think through a Tier D decision —
+doing so would tie a mechanically-enforced hard stop to a specific
+external tool's availability. Both files now carry a one-line pointer
+encouraging (not requiring) a structured interrogation process where a
+team has one available, without naming a specific tool in either the ADR
+template or the mandate itself. The ADR's own shape — what fields the
+finished document must have — remains standardized regardless of how it
+was drafted.
+
 ## C. Fixes applied 2026-08-04 (`framework-reviews/FRAMEWORK-REVIEW.md`)
 
 A review cross-checked against two real consuming repos found several
