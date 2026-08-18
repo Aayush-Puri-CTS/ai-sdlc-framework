@@ -101,7 +101,7 @@ flags, standard `npm run` behavior):
 
 ```
 agents/                  Coordinator/Implementor/Verifier role contracts
-hooks/                    verify-loop.sh, implementor-git-guard.sh (+ lib/)
+hooks/                    verify-loop.sh, implementor-git-guard.sh, session-start-handoff.mjs (+ lib/)
 lib/ticket-source/        Ticket-intake adapter boundary (MCP + manual)
 templates/                CLAUDE.md / REVIEW.md / SPEC.md / CHANGELOG.md templates + stack starters + skills/
 scripts/                  validate-config.mjs, scaffold.mjs, cut-changelog-release.mjs
